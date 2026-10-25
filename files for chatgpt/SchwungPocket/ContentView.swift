@@ -1370,7 +1370,7 @@ private struct MirrorScreen: View {
                     .accessibilityLabel("Choose mirrored display layout")
                     Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Zoom out")
-                    Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.text).frame(maxWidth: .infinity, minHeight: 46)
+                    Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, minHeight: 46)
                     Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Zoom in")
                     Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
