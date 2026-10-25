@@ -81,16 +81,43 @@ final class RemoteControlStore: ObservableObject {
         levels.first(where: { $0.id == selectedLevelID })?.name ?? instrumentName
     }
 
-    /// Parameters for the selected level, in the order the device's hierarchy lists them.
+    /// Parameters for the selected hierarchy level, preserving the order supplied by Schwung.
+    /// Parameters not referenced by any hierarchy level remain visible at the root as an "Other"
+    /// group, rather than silently disappearing from the remote control list.
     var visibleParameters: [RemoteParameter] {
-        guard let level = levels.first(where: { $0.id == selectedLevelID }), !level.parameterKeys.isEmpty else { return parameters }
+        guard let level = levels.first(where: { $0.id == selectedLevelID }) else {
+            return parameters.sorted(by: parameterDisplayOrder)
+        }
+
         var ordered: [RemoteParameter] = []
         for key in level.parameterKeys {
-            if let match = parameters.first(where: { $0.wireKey == key || $0.key == key }), !ordered.contains(match) {
+            if let match = parameters.first(where: { $0.wireKey == key || $0.key == key }),
+               !ordered.contains(match) {
                 ordered.append(match)
             }
         }
+
+        if selectedLevelID == "root" {
+            let referencedKeys = Set(levels.flatMap(\\.parameterKeys))
+            let unassigned = parameters
+                .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
+                .sorted(by: parameterDisplayOrder)
+            ordered.append(contentsOf: unassigned.filter { !ordered.contains($0) })
+        }
+
+        // If Schwung has not supplied a usable hierarchy yet, do not hide the parameters.
+        if ordered.isEmpty {
+            return parameters.sorted(by: parameterDisplayOrder)
+        }
         return ordered
+    }
+
+    private func parameterDisplayOrder(_ lhs: RemoteParameter, _ rhs: RemoteParameter) -> Bool {
+        let componentOrder = lhs.component.localizedCaseInsensitiveCompare(rhs.component)
+        if componentOrder != .orderedSame { return componentOrder == .orderedAscending }
+        let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+        if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+        return lhs.key < rhs.key
     }
 
     /// Full metadata dump for bug reports (no addresses, no values).
