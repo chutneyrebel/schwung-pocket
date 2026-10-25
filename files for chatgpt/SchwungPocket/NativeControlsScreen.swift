@@ -17,6 +17,7 @@ struct NativeControlsScreen: View {
         ) {
             connectionCard
             destinationCard
+            slotSettingsCard
             contentSection
         }
         .onAppear {
@@ -94,6 +95,111 @@ struct NativeControlsScreen: View {
                 }
             }
         }
+    }
+
+    // MARK: Slot settings
+
+    private var slotSettingsCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("SLOT SETTINGS")
+                        .font(.system(size: 10, weight: .heavy)).tracking(1.4)
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Text(remote.destination.title)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Volume").font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Text("\(Int((remote.slotVolume * 100).rounded()))%")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Theme.accent)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { remote.slotVolume },
+                            set: { remote.setSlotVolume($0) }
+                        ),
+                        in: 0...4,
+                        step: 0.05
+                    )
+                    .tint(Theme.accent)
+                    .disabled(!remote.isConnected || !isInstrumentSlot)
+                }
+
+                Toggle(isOn: Binding(
+                    get: { remote.slotMuted },
+                    set: { remote.setSlotMuted($0) }
+                )) {
+                    Text("Muted").font(.system(size: 13, weight: .medium))
+                }
+                .tint(Theme.accent)
+                .disabled(!remote.isConnected || !isInstrumentSlot)
+
+                Toggle(isOn: Binding(
+                    get: { remote.slotSoloed },
+                    set: { remote.setSlotSoloed($0) }
+                )) {
+                    Text("Soloed").font(.system(size: 13, weight: .medium))
+                }
+                .tint(Theme.accent)
+                .disabled(!remote.isConnected || !isInstrumentSlot)
+
+                settingDivider
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Receive Channel").font(.system(size: 13, weight: .medium))
+                    Picker("Receive Channel", selection: Binding(
+                        get: { remote.slotReceiveChannel },
+                        set: { remote.setSlotReceiveChannel($0) }
+                    )) {
+                        Text("All").tag("0")
+                        ForEach(1...16, id: \.self) { channel in
+                            Text("Channel \(channel)").tag(String(channel))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Theme.accent)
+                    .disabled(!remote.isConnected || !isInstrumentSlot)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Forward Channel").font(.system(size: 13, weight: .medium))
+                    Picker("Forward Channel", selection: Binding(
+                        get: { remote.slotForwardChannel },
+                        set: { remote.setSlotForwardChannel($0) }
+                    )) {
+                        Text("THRU").tag("-2")
+                        Text("Auto").tag("-1")
+                        ForEach(0...15, id: \.self) { channel in
+                            Text("Channel \(channel + 1)").tag(String(channel))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Theme.accent)
+                    .disabled(!remote.isConnected || !isInstrumentSlot)
+                }
+
+                if !isInstrumentSlot {
+                    Text("These settings apply to Slots 1–4. Master FX and Tool use separate controls.")
+                        .font(.system(size: 11)).lineSpacing(2).foregroundStyle(Theme.muted)
+                }
+            }
+        }
+    }
+
+    private var isInstrumentSlot: Bool {
+        if case .slot = remote.wireTarget { return true }
+        return false
+    }
+
+    private var settingDivider: some View {
+        Rectangle().fill(Theme.muted.opacity(0.2)).frame(height: 1)
     }
 
     // MARK: Content
