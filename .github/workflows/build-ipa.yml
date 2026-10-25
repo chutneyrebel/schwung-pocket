@@ -15,69 +15,83 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Find and extract project source (with diagnostics)
+      - name: Find and extract project (including nested ZIPs)
         shell: bash
         run: |
           set -euo pipefail
           echo "Repository root: $GITHUB_WORKSPACE"
-          echo "Repository files (first 100):"
-          find "$GITHUB_WORKSPACE" -maxdepth 4 -type f -not -path '*/.git/*' -print | head -100
+          echo "Repository files:"
+          find "$GITHUB_WORKSPACE" -maxdepth 5 -type f -not -path '*/.git/*' -print | head -150
 
-          ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f \( -iname 'SchwungPocket-Starter.zip' -o -iname '*SchwungPocket*Starter*.zip' \) -not -path '*/.git/*' -print -quit)"
+          ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f \( -iname 'SchwungPocket-Starter.zip' -o -iname '*SchwungPocket*Starter*.zip' -o -iname '*Cloud*Build*Kit*.zip' \) -not -path '*/.git/*' -print -quit)"
           if [[ -z "${ZIP_FILE:-}" ]]; then
-            echo "ERROR: Could not find SchwungPocket-Starter.zip (or a similarly named Starter ZIP) anywhere in the repository." >&2
-            echo "Upload the ZIP into the repository and commit it, or extract the source files directly into the repository." >&2
+            echo "ERROR: Could not find the Schwung Pocket source ZIP in the repository." >&2
             exit 1
           fi
-          echo "Using source archive: $ZIP_FILE"
+          echo "Opening archive: $ZIP_FILE"
 
           SOURCE_ROOT="$RUNNER_TEMP/schwungpocket-source"
+          rm -rf "$SOURCE_ROOT"
           mkdir -p "$SOURCE_ROOT"
           unzip -q "$ZIP_FILE" -d "$SOURCE_ROOT"
 
-          echo "Extracted files (first 100):"
-          find "$SOURCE_ROOT" -maxdepth 6 -print | head -100
-          PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit)"
-          if [[ -z "${PROJECT:-}" ]]; then
-            echo "ERROR: No .xcodeproj directory found inside the archive." >&2
-            echo "Check that the uploaded ZIP is the original SchwungPocket-Starter.zip, not a different archive." >&2
+          PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
+          DEPTH=0
+          while [[ -z "$PROJECT" && "$DEPTH" -lt 5 ]]; do
+            NESTED_ZIP="$(find "$SOURCE_ROOT" -type f -iname '*.zip' -print -quit || true)"
+            if [[ -z "$NESTED_ZIP" ]]; then
+              break
+            fi
+            DEPTH=$((DEPTH + 1))
+            NESTED_DEST="$SOURCE_ROOT/__unpacked_nested_$DEPTH"
+            mkdir -p "$NESTED_DEST"
+            echo "No Xcode project at current level. Extracting nested archive: $NESTED_ZIP"
+            unzip -q "$NESTED_ZIP" -d "$NESTED_DEST"
+            rm -f "$NESTED_ZIP"
+            PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
+          done
+
+          echo "Extracted files (first 150):"
+          find "$SOURCE_ROOT" -maxdepth 7 -print | head -150
+          if [[ -z "$PROJECT" ]]; then
+            echo "ERROR: Extracted archive(s), but no .xcodeproj directory was found." >&2
+            echo "The uploaded ZIP does not appear to contain the SchwungPocket Xcode source project." >&2
             exit 1
           fi
-          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
           echo "Found Xcode project: $PROJECT"
+          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: Show Xcode version and project targets
+      - name: Inspect Xcode project
         shell: bash
         run: |
           set -euo pipefail
           xcodebuild -version
           xcodebuild -list -project "$PROJECT_PATH"
 
-      - name: Build for iPhone (unsigned)
+      - name: Build unsigned iPhone app
         shell: bash
         run: |
           set -euo pipefail
           DERIVED="$RUNNER_TEMP/SchwungPocketDerivedData"
+          set -o pipefail
           xcodebuild \
             -project "$PROJECT_PATH" \
             -target SchwungPocket \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath "$DERIVED" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
 
-          APP="$(find "$DERIVED/Build/Products" -maxdepth 3 -type d -name 'SchwungPocket.app' -print -quit)"
-          if [[ -z "${APP:-}" ]]; then
-            echo "ERROR: Build command finished but SchwungPocket.app was not found." >&2
-            echo "Build output folders:" >&2
-            find "$DERIVED/Build/Products" -maxdepth 4 -print 2>/dev/null | head -100 >&2 || true
+          APP="$(find "$DERIVED/Build/Products" -maxdepth 4 -type d -name 'SchwungPocket.app' -print -quit || true)"
+          if [[ -z "$APP" ]]; then
+            echo "ERROR: Build completed without a SchwungPocket.app bundle." >&2
+            find "$DERIVED/Build/Products" -maxdepth 5 -print 2>/dev/null | head -100 >&2 || true
             exit 1
           fi
-          echo "Found built app: $APP"
-
           STAGE="$RUNNER_TEMP/SchwungPocketIpaStage"
           rm -rf "$STAGE"
           mkdir -p "$STAGE/Payload"
@@ -86,7 +100,7 @@ jobs:
           test -s "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
           ls -lh "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
 
-      - name: Upload IPA artifact
+      - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: SchwungPocket-unsigned-ipa
