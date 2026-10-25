@@ -17,7 +17,7 @@ struct NativeControlsScreen: View {
         ) {
             connectionCard
             destinationCard
-            slotSettingsCard
+            if isInstrumentSlot { slotSettingsCard }
             contentSection
         }
         .onAppear {
