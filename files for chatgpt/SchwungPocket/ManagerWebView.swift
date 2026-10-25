@@ -179,14 +179,35 @@ struct ManagerWebView: UIViewRepresentable {
               document.documentElement.style.width = '100%'; document.body.style.width = '100%';
               window.__spApplyMirrorLayout = () => {
                 const current = (window.__spMirrorRoots || []).filter(el => el && el.isConnected);
+                // Restore original visibility before measuring. Otherwise a previously hidden
+                // top/bottom panel has a zero-sized rectangle and rotation cannot re-order panels.
+                current.forEach(el => {
+                  const original = el.dataset.spOriginalDisplay || '__default__';
+                  el.style.display = original === '__default__' ? '' : original;
+                  el.style.width = ''; el.style.height = '';
+                });
+                current.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+                window.__spMirrorRoots = current;
                 current.forEach((el, i) => {
                   const original = el.dataset.spOriginalDisplay || '__default__';
                   const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === current.length - 1);
                   el.style.display = show ? (original === '__default__' ? '' : original) : 'none';
-                  el.style.width = ''; el.style.height = '';
-                  if (show && fit) { el.style.maxWidth = '100vw'; el.style.maxHeight = '100dvh'; el.style.boxSizing = 'border-box'; if (mode !== 'both') { el.style.width = '100vw'; el.style.height = '100dvh'; el.style.objectFit = 'contain'; } }
+                  if (show && fit) {
+                    el.style.maxWidth = '100vw';
+                    el.style.maxHeight = '100vh';
+                    el.style.maxHeight = '100dvh';
+                    el.style.boxSizing = 'border-box';
+                    if (mode !== 'both') {
+                      el.style.width = '100vw';
+                      el.style.height = '100vh';
+                      el.style.height = '100dvh';
+                      el.style.objectFit = 'contain';
+                    }
+                  }
                 });
-                document.documentElement.style.width = '100%'; document.body.style.width = '100%'; window.scrollTo(0,0);
+                document.documentElement.style.width = '100%';
+                document.body.style.width = '100%';
+                window.scrollTo(0,0);
               };
               if (!window.__spResizeHandlerInstalled) {
                 window.__spResizeHandlerInstalled = true;
