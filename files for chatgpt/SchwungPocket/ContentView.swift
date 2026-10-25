@@ -1686,7 +1686,7 @@ private struct ConnectionSettingsScreen: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Label("Bottom navigation order", systemImage: "arrow.left.arrow.right")
                                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                            Text("Move sections up or down. Vault is available inside Settings, not in the bottom navigation.")
+                            Text("Move sections up or down. Files opens the file browser on your connected Move.")
                                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
                             ForEach(Array(orderedTabNames.enumerated()), id: \.element.id) { item in
                                 let index = item.offset
