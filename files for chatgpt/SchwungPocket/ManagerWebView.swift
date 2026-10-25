@@ -156,6 +156,16 @@ struct ManagerWebView: UIViewRepresentable {
                   delete el.dataset.spMirrorChromeDisplay;
                 }
               }
+              // Also hide standalone status labels nested inside layout wrappers that
+              // contain the display. Do not hide any element that wraps a mirror root.
+              for (const el of document.querySelectorAll('body *')) {
+                if (roots.some(root => el === root || el.contains(root))) continue;
+                const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (!text || text.length > 110 || !/move\\s*(is\\s*)?(reachable|connected|offline)|connection\\s*status|connected\\s*to\\s*move/i.test(text)) continue;
+                if (el.querySelector('canvas, img, video, svg')) continue;
+                if (!el.dataset.spMirrorStatusDisplay) el.dataset.spMirrorStatusDisplay = el.style.display || '__default__';
+                el.style.display = 'none';
+              }
               roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
