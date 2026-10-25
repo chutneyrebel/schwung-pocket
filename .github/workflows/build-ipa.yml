@@ -1,0 +1,68 @@
+name: Build Schwung Pocket IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-ipa:
+    name: Compile iOS app in cloud
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Extract project source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f "SchwungPocket-Starter.zip" ]]; then
+            echo "Missing SchwungPocket-Starter.zip in the repository root." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/schwungpocket-source"
+          unzip -q "SchwungPocket-Starter.zip" -d "$RUNNER_TEMP/schwungpocket-source"
+          test -d "$RUNNER_TEMP/schwungpocket-source/SchwungPocket/SchwungPocket.xcodeproj"
+
+      - name: Build for iPhone (no local Xcode needed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT="$RUNNER_TEMP/schwungpocket-source/SchwungPocket/SchwungPocket.xcodeproj"
+          DERIVED="$RUNNER_TEMP/SchwungPocketDerivedData"
+          xcodebuild \
+            -project "$PROJECT" \
+            -target SchwungPocket \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build
+
+          APP="$DERIVED/Build/Products/Release-iphoneos/SchwungPocket.app"
+          if [[ ! -d "$APP" ]]; then
+            echo "Build succeeded but SchwungPocket.app was not found at: $APP" >&2
+            exit 1
+          fi
+
+          STAGE="$RUNNER_TEMP/SchwungPocketIpaStage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE/Payload"
+          /usr/bin/ditto "$APP" "$STAGE/Payload/SchwungPocket.app"
+          (cd "$STAGE" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa" Payload)
+          test -s "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
+          echo "Created unsigned IPA: $GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchwungPocket-unsigned-ipa
+          path: SchwungPocket-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
