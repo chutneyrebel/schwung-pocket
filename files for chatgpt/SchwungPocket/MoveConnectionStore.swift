@@ -97,6 +97,12 @@ final class MoveConnectionStore: ObservableObject {
         return components.url
     }
 
+    var filesURL: URL? {
+        guard var components = baseComponents else { return nil }
+        components.path = "/files"
+        return components.url
+    }
+
     /// Checks immediately on foreground, then retries while the app remains active.
     /// iOS suspends background apps, so this intentionally does not promise background polling.
     func startMonitoring(intervalSeconds: UInt64 = 25) {
