@@ -227,26 +227,25 @@ struct ManagerWebView: UIViewRepresentable {
             let script = #"""
             (() => {
               const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
-              const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+              const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.getAttribute('data-state'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
               const controls = [...document.querySelectorAll('button,[role="button"],a,[onclick],input[type="button"],label')].filter(visible);
-              const unmute = controls.find(el => /unmute|enable\s*(sound|audio)|sound\s*on|audio\s*on/i.test(label(el)));
-              if (unmute) unmute.click();
+              const toggle = controls.find(el => /\b(unmute|mute|audio|sound)\b/i.test(label(el)) && !/volume\s*(up|down)|increase\s*volume|decrease\s*volume/i.test(label(el)));
+              if (toggle) {
+                const text = label(toggle);
+                toggle.click();
+                return /\bunmute\b|enable\s*(sound|audio)/i.test(text) ? 'enabled' : /\bmute\b/i.test(text) ? 'muted' : 'toggled';
+              }
               let mediaCount = 0;
-              document.querySelectorAll('audio,video').forEach(media => { media.muted = false; media.volume = 1; mediaCount++; const p = media.play(); if (p && p.catch) p.catch(() => {}); });
+              document.querySelectorAll('audio,video').forEach(media => { media.muted = !media.muted; media.volume = 1; mediaCount++; if (!media.muted) { const p = media.play(); if (p && p.catch) p.catch(() => {}); } });
               const contexts = window.__spAudioContexts || [];
               let resumedContexts = 0;
-              contexts.forEach(context => {
-                if (context && context.state !== 'closed') {
-                  if (context.state === 'suspended') context.resume().catch(() => {});
-                  resumedContexts++;
-                }
-              });
-              return (unmute || mediaCount > 0 || resumedContexts > 0) ? 'enabled' : 'not-found';
+              contexts.forEach(context => { if (context && context.state !== 'closed') { if (context.state === 'suspended') context.resume().catch(() => {}); resumedContexts++; } });
+              return mediaCount > 0 || resumedContexts > 0 ? 'toggled' : 'not-found';
             })();
             """#
             webView.evaluateJavaScript(script) { [weak self] result, error in
                 DispatchQueue.main.async {
-                    if let error { NSLog("Schwung Pocket could not enable portal audio: %@", error.localizedDescription); self?.onAudioControlResult?("not-found") }
+                    if let error { NSLog("Schwung Pocket could not toggle portal audio: %@", error.localizedDescription); self?.onAudioControlResult?("not-found") }
                     else { self?.onAudioControlResult?((result as? String) ?? "not-found") }
                 }
             }
