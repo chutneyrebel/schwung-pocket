@@ -65,13 +65,10 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(orderedTabs) { tab in
-                content(for: tab)
-                    .tag(tab)
-            }
+        ZStack {
+            content(for: selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .toolbar(.hidden, for: .tabBar)
         .background(Theme.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !navigationHidden || !navigationAutoHideEnabled {
