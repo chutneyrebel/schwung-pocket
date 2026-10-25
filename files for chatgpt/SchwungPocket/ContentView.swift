@@ -1333,8 +1333,8 @@ private struct MirrorScreen: View {
                         audioTrigger: audioTrigger,
                         onAudioControlResult: { result in
                             audioTrigger = nil
-                            if result != "enabled" {
-                                recordMessage = "The portal audio control was not found. Try tapping Unmute on the web page once, then use this shortcut again."
+                            if result == "not-found" {
+                                recordMessage = "The portal audio control was not found. Try using the audio control on the web page once, then use this shortcut again."
                                 showingRecordMessage = true
                             }
                         },
@@ -1354,51 +1354,40 @@ private struct MirrorScreen: View {
                     InvalidAddressView()
                 }
 
-                HStack(spacing: 10) {
+                HStack(spacing: 0) {
                     Menu {
                         ForEach(MirrorDisplayMode.allCases) { mode in
-                            Button {
-                                savedMirrorDisplayMode = mode.rawValue
-                            } label: {
-                                if mirrorDisplayMode == mode {
-                                    Label(mode.title, systemImage: "checkmark")
-                                } else {
-                                    Text(mode.title)
-                                }
+                            Button { savedMirrorDisplayMode = mode.rawValue } label: {
+                                if mirrorDisplayMode == mode { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
                             }
                         }
                     } label: {
                         Label(mirrorDisplayMode.title, systemImage: mirrorDisplayMode.symbol)
                             .font(.system(size: 12, weight: .semibold))
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Choose mirrored display layout")
-
-                    Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass") }
+                    Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Zoom out")
-                    Text("\(Int(mirrorZoom * 100))%")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white)
-                    Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
+                    Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.text).frame(maxWidth: .infinity, minHeight: 46)
+                    Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Zoom in")
-                    Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill") }
-                        .accessibilityLabel("Enable mirror audio")
-                    Button { recordTrigger = UUID() } label: {
-                        Image(systemName: isRecording ? "stop.circle.fill" : "record.circle")
-                    }
-                    .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
-                    Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise") }
+                    Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                        .accessibilityLabel("Toggle mirror audio mute")
+                    Button { recordTrigger = UUID() } label: { Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                        .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                    Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Refresh Move mirror")
-                    Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                    Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
                         .accessibilityLabel("Open full-screen mirror")
                 }
-                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(Theme.background.opacity(0.96))
-                // Keep mirror recording controls clear of the app footer. When auto-hide
-                // removes the footer, let this toolbar settle against the bottom edge.
+                .padding(.horizontal, 6)
+                .padding(.vertical, 6)
+                .background(Theme.background.opacity(0.98))
+                .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                 .padding(.bottom, (!navigationHidden || !navigationAutoHideEnabled) ? 62 : 0)
-
 
             }
             .background(Theme.background)
@@ -1446,10 +1435,10 @@ private struct FullscreenMirrorView: View {
                 audioTrigger: audioTrigger,
                 onAudioControlResult: { result in
                     audioTrigger = nil
-                    if result != "enabled" {
-                        recordMessage = "The portal audio control was not found. Try tapping Unmute on the web page once, then use this shortcut again."
-                        showingRecordMessage = true
-                    }
+                    if result == "not-found" {
+                                recordMessage = "The portal audio control was not found. Try using the audio control on the web page once, then use this shortcut again."
+                                showingRecordMessage = true
+                            }
                 },
                 onRecordControlResult: { result in
                     recordTrigger = nil
@@ -1471,7 +1460,7 @@ private struct FullscreenMirrorView: View {
                     HStack(spacing: 10) {
                         Button { dismiss() } label: {
                             Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Exit full-screen mirror")
                         Spacer()
@@ -1487,53 +1476,50 @@ private struct FullscreenMirrorView: View {
                         } label: {
                             Text("\(displayModeSelection.capitalized) · \(Int(zoom * 100))%")
                                 .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
+                                .foregroundStyle(Theme.accent)
                                 .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(.black.opacity(0.72), in: Capsule())
+                                .background(Theme.background.opacity(0.97), in: Capsule())
+                                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         Button { audioTrigger = UUID() } label: {
                             Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Enable mirror audio")
                         Button { recordTrigger = UUID() } label: {
                             Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
                         Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: {
                             Image(systemName: "arrow.clockwise").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Refresh full-screen mirror")
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.top, 10)
                     Spacer()
-                    HStack(spacing: 12) {
-                        HStack(spacing: 5) {
-                            Circle().fill(device.status == .connected ? Theme.success : (device.status == .checking ? Theme.accent : Color.red)).frame(width: 7, height: 7)
-                            Text(device.status == .connected ? "Move reachable" : device.status == .checking ? "Checking Move" : "Move offline")
-                                .font(.system(size: 10, weight: .semibold))
-                                .lineLimit(1)
-                        }
-                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "antenna.radiowaves.left.and.right") }
-                            .accessibilityLabel("Check Move connection")
-                        Divider().frame(height: 22).overlay(.white.opacity(0.35))
-                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass") }
+                    HStack(spacing: 14) {
+                        Circle().fill(device.status == .connected ? Theme.success : (device.status == .checking ? Theme.accent : Color.red)).frame(width: 9, height: 9)
+                            .accessibilityLabel(device.status == .connected ? "Move connected" : device.status == .checking ? "Checking Move connection" : "Move offline")
+                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 18, weight: .semibold)) }
+                            .accessibilityLabel("Refresh Move connection")
+                        Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
+                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom out")
-                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
+                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom in")
-                        Divider().frame(height: 22).overlay(.white.opacity(0.35))
-                        Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: {
-                            Label(keepAwake ? "Keep Awake" : "Allow Sleep", systemImage: keepAwake ? "sun.max.fill" : "moon.zzz")
-                        }
-                        Button { controlsVisible = false } label: { Image(systemName: "eye.slash") }
+                        Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
+                        Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: { Label(keepAwake ? "Keep Awake" : "Allow Sleep", systemImage: keepAwake ? "sun.max.fill" : "moon.zzz") }
+                        Button { controlsVisible = false } label: { Image(systemName: "eye.slash").font(.system(size: 18, weight: .semibold)) }
                             .accessibilityLabel("Hide mirror controls")
                     }
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background(.black.opacity(0.72), in: Capsule())
+                    .background(Theme.background.opacity(0.97), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                     .padding(.bottom, 18)
                 }
                 .transition(.opacity)
