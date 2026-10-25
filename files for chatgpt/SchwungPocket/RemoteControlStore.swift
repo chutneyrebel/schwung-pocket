@@ -81,9 +81,7 @@ final class RemoteControlStore: ObservableObject {
         levels.first(where: { $0.id == selectedLevelID })?.name ?? instrumentName
     }
 
-    /// Parameters for the selected hierarchy level, preserving the order supplied by Schwung.
-    /// Parameters not referenced by any hierarchy level remain visible at the root as an "Other"
-    /// group, rather than silently disappearing from the remote control list.
+    /// Parameters for the selected hierarchy level, preserving Schwung's declared order.
     var visibleParameters: [RemoteParameter] {
         guard let level = levels.first(where: { $0.id == selectedLevelID }) else {
             return parameters.sorted(by: parameterDisplayOrder)
@@ -97,16 +95,8 @@ final class RemoteControlStore: ObservableObject {
             }
         }
 
-        if selectedLevelID == "root" {
-            let referencedKeys = Set(levels.flatMap(\\.parameterKeys))
-            let unassigned = parameters
-                .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
-                .sorted(by: parameterDisplayOrder)
-            ordered.append(contentsOf: unassigned.filter { !ordered.contains($0) })
-        }
-
-        // If Schwung has not supplied a usable hierarchy yet, do not hide the parameters.
-        if ordered.isEmpty {
+        // Before a hierarchy arrives, retain the useful flat parameter view.
+        if levels.isEmpty || (selectedLevelID == "root" && levels.count == 1 && ordered.isEmpty) {
             return parameters.sorted(by: parameterDisplayOrder)
         }
         return ordered
@@ -118,6 +108,30 @@ final class RemoteControlStore: ObservableObject {
         let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
         if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
         return lhs.key < rhs.key
+    }
+
+    private func refreshOtherLevel() {
+        guard !levels.isEmpty else { return }
+        let baseLevels = levels.filter { $0.id != "other" }
+        let referencedKeys = Set(baseLevels.flatMap(\\.parameterKeys))
+        let unassigned = parameters
+            .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
+            .sorted(by: parameterDisplayOrder)
+            .map(\\.wireKey)
+
+        levels = baseLevels
+        if !unassigned.isEmpty {
+            levels.append(RemoteLevel(id: "other", name: "Other", parameterKeys: unassigned))
+        }
+        levels.sort { left, right in
+            if left.id == "root" { return right.id != "root" }
+            if right.id == "root" { return false }
+            if left.id == "other" { return false }
+            if right.id == "other" { return true }
+            let comparison = left.name.localizedCaseInsensitiveCompare(right.name)
+            if comparison != .orderedSame { return comparison == .orderedAscending }
+            return left.id < right.id
+        }
     }
 
     /// Full metadata dump for bug reports (no addresses, no values).
@@ -475,7 +489,8 @@ final class RemoteControlStore: ObservableObject {
             return left.id < right.id
         }
         levels = found
-        if !found.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = found.first?.id ?? "root" }
+        refreshOtherLevel()
+        if !levels.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = levels.first?.id ?? "root" }
     }
 
     private func handleChainParams(_ message: [String: Any]) {
@@ -487,6 +502,7 @@ final class RemoteControlStore: ObservableObject {
         let parsed = items.compactMap { RemoteParameter.parse($0, component: component) }
         for parameter in parsed { RemoteDiagnostics.log(RemoteDiagnostics.describe(parameter)) }
         parameters = parameters.filter { $0.component != component } + parsed
+        refreshOtherLevel()
         loadState = .loaded
         loadTimeoutTask?.cancel()
     }
