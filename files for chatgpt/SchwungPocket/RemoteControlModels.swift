@@ -48,7 +48,7 @@ enum RemoteWireTarget: Equatable {
 /// - Master FX and Tool: the observed traffic only covers instrument slots. No evidence of how the
 ///   Remote UI addresses them exists in the project, so nothing is sent for them.
 enum RemoteProtocolAdapter {
-    static let slotWireOffset = 0
+    static let slotWireOffset = -1
 
     static func target(for destination: RemoteDestination) -> RemoteWireTarget {
         switch destination {
