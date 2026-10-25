@@ -137,7 +137,7 @@ struct ManagerWebView: UIViewRepresentable {
               // Cache candidates before hiding anything. Hidden elements remain in this list so modes can always be switched back.
               if (!window.__spMirrorRoots || !window.__spMirrorRoots.some(el => el && el.isConnected)) {
                 const all = [...document.querySelectorAll(selector)].filter(visible);
-                window.__spMirrorRoots = all.filter(el => !all.some(other => other !== el && el.contains(other)));
+                window.__spMirrorRoots = all.filter(el => !all.some(other => other !== el && other.contains(el)));
                 window.__spMirrorRoots.sort((a,b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
                 window.__spMirrorRoots.forEach((el, i) => { if (!el.dataset.spOriginalDisplay) el.dataset.spOriginalDisplay = el.style.display || '__default__'; el.dataset.spMirrorIndex = String(i); });
               }
