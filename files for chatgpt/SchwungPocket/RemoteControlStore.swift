@@ -316,6 +316,49 @@ final class RemoteControlStore: ObservableObject {
         sendParameter(String(safe), for: parameter)
     }
 
+    // MARK: Slot settings
+    // These five keys and their wire encodings are defined by Schwung Manager's Remote UI.
+    // They are independent of the loaded instrument's module parameter metadata.
+    var slotVolume: Double {
+        let raw = values["slot:volume"].flatMap(Double.init) ?? 1.0
+        return min(max(raw, 0), 4)
+    }
+
+    var slotMuted: Bool { values["slot:muted"] == "1" }
+    var slotSoloed: Bool { values["slot:soloed"] == "1" }
+    var slotReceiveChannel: String { values["slot:receive_channel"] ?? "0" }
+    var slotForwardChannel: String { values["slot:forward_channel"] ?? "-1" }
+
+    func setSlotVolume(_ proposed: Double) {
+        let stepped = (min(max(proposed, 0), 4) / 0.05).rounded() * 0.05
+        setSlotSetting("slot:volume", value: String(format: "%.2f", stepped))
+    }
+
+    func setSlotMuted(_ isMuted: Bool) {
+        setSlotSetting("slot:muted", value: isMuted ? "1" : "0")
+    }
+
+    func setSlotSoloed(_ isSoloed: Bool) {
+        setSlotSetting("slot:soloed", value: isSoloed ? "1" : "0")
+    }
+
+    func setSlotReceiveChannel(_ channel: String) {
+        guard let value = Int(channel), (0...16).contains(value) else { return }
+        setSlotSetting("slot:receive_channel", value: channel)
+    }
+
+    func setSlotForwardChannel(_ channel: String) {
+        guard let value = Int(channel), (-2...15).contains(value) else { return }
+        setSlotSetting("slot:forward_channel", value: channel)
+    }
+
+    private func setSlotSetting(_ key: String, value: String) {
+        guard isConnected, case .slot(let slot) = wireTarget else { return }
+        values[key] = value
+        lastSent[key] = value
+        send(["type": "set_param", "slot": slot, "key": key, "value": value])
+    }
+
     private func sendParameter(_ text: String, for parameter: RemoteParameter) {
         guard case .slot(let slot) = wireTarget else { return }
         values[parameter.wireKey] = text
