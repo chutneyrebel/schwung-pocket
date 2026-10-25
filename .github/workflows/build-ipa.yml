@@ -15,58 +15,185 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Find and extract project (including nested ZIPs)
+      - name: Locate and extract app source
+        id: source
         shell: bash
         run: |
           set -euo pipefail
           echo "Repository root: $GITHUB_WORKSPACE"
-          echo "Repository files:"
-          find "$GITHUB_WORKSPACE" -maxdepth 5 -type f -not -path '*/.git/*' -print | head -150
+          echo "Repository files (first 150):"
+          find "$GITHUB_WORKSPACE" -maxdepth 5 -type f -not -path '*/.git/*' -print | head -150 || true
 
-          ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f \( -iname 'SchwungPocket-Starter.zip' -o -iname '*SchwungPocket*Starter*.zip' -o -iname '*Cloud*Build*Kit*.zip' \) -not -path '*/.git/*' -print -quit)"
-          if [[ -z "${ZIP_FILE:-}" ]]; then
-            echo "ERROR: Could not find the Schwung Pocket source ZIP in the repository." >&2
-            exit 1
-          fi
-          echo "Opening archive: $ZIP_FILE"
-
+          # Also support a project that has already been extracted into the repository.
+          PROJECT="$(find "$GITHUB_WORKSPACE" -type d -name '*.xcodeproj' -not -path '*/.git/*' -print -quit || true)"
           SOURCE_ROOT="$RUNNER_TEMP/schwungpocket-source"
           rm -rf "$SOURCE_ROOT"
           mkdir -p "$SOURCE_ROOT"
-          unzip -q "$ZIP_FILE" -d "$SOURCE_ROOT"
 
-          PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
-          DEPTH=0
-          while [[ -z "$PROJECT" && "$DEPTH" -lt 5 ]]; do
-            NESTED_ZIP="$(find "$SOURCE_ROOT" -type f -iname '*.zip' -print -quit || true)"
-            if [[ -z "$NESTED_ZIP" ]]; then
-              break
-            fi
-            DEPTH=$((DEPTH + 1))
-            NESTED_DEST="$SOURCE_ROOT/__unpacked_nested_$DEPTH"
-            mkdir -p "$NESTED_DEST"
-            echo "No Xcode project at current level. Extracting nested archive: $NESTED_ZIP"
-            unzip -q "$NESTED_ZIP" -d "$NESTED_DEST"
-            rm -f "$NESTED_ZIP"
-            PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
-          done
-
-          echo "Extracted files (first 150):"
-          find "$SOURCE_ROOT" -maxdepth 7 -print | head -150
           if [[ -z "$PROJECT" ]]; then
-            echo "ERROR: Extracted archive(s), but no .xcodeproj directory was found." >&2
-            echo "The uploaded ZIP does not appear to contain the SchwungPocket Xcode source project." >&2
+            ZIP_FILE=""
+            # Prefer the expected starter archive, then accept other clearly named kits.
+            if [[ -f "$GITHUB_WORKSPACE/SchwungPocket-Starter.zip" ]]; then
+              ZIP_FILE="$GITHUB_WORKSPACE/SchwungPocket-Starter.zip"
+            else
+              ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f \( -iname '*SchwungPocket*Starter*.zip' -o -iname '*Schwung*Pocket*Build*Kit*.zip' \) -not -path '*/.git/*' -print -quit || true)"
+            fi
+            if [[ -z "$ZIP_FILE" ]]; then
+              echo "ERROR: No .xcodeproj was found and no Schwung Pocket source ZIP was found." >&2
+              exit 1
+            fi
+
+            echo "Opening source archive: $ZIP_FILE"
+            unzip -q "$ZIP_FILE" -d "$SOURCE_ROOT"
+
+            # Some earlier kits accidentally contained the source ZIP inside another ZIP.
+            # Unpack nested archives until the actual Xcode project is found.
+            DEPTH=0
+            while [[ "$DEPTH" -lt 8 ]]; do
+              PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
+              [[ -n "$PROJECT" ]] && break
+              NESTED_ZIP="$(find "$SOURCE_ROOT" -type f -iname '*.zip' -print -quit || true)"
+              if [[ -z "$NESTED_ZIP" ]]; then
+                break
+              fi
+              DEPTH=$((DEPTH + 1))
+              NESTED_DEST="$SOURCE_ROOT/__nested_archive_$DEPTH"
+              mkdir -p "$NESTED_DEST"
+              echo "Extracting nested archive ($DEPTH): $NESTED_ZIP"
+              unzip -q "$NESTED_ZIP" -d "$NESTED_DEST"
+              rm -f "$NESTED_ZIP"
+            done
+            PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit || true)"
+          fi
+
+          if [[ -z "$PROJECT" || ! -f "$PROJECT/project.pbxproj" ]]; then
+            echo "ERROR: Could not locate a valid .xcodeproj/project.pbxproj." >&2
+            echo "Extracted paths (first 200):" >&2
+            find "$SOURCE_ROOT" -maxdepth 8 -print | head -200 >&2 || true
             exit 1
           fi
-          echo "Found Xcode project: $PROJECT"
-          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
 
-      - name: Inspect Xcode project
+          echo "Found project: $PROJECT"
+          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
+          echo "SOURCE_ROOT=$SOURCE_ROOT" >> "$GITHUB_ENV"
+
+      - name: Generate a shared Xcode scheme for the app target
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild -version
-          xcodebuild -list -project "$PROJECT_PATH"
+          python3 - "$PROJECT_PATH" "$GITHUB_ENV" <<'PY'
+          from pathlib import Path
+          import html
+          import re
+          import sys
+
+          project_path = Path(sys.argv[1])
+          github_env = Path(sys.argv[2])
+          pbxproj = project_path / "project.pbxproj"
+          text = pbxproj.read_text(encoding="utf-8")
+          section_match = re.search(
+              r"/\* Begin PBXNativeTarget section \*/(.*?)/\* End PBXNativeTarget section \*/",
+              text,
+              flags=re.S,
+          )
+          if not section_match:
+              raise SystemExit("ERROR: PBXNativeTarget section not found in project.pbxproj")
+
+          app_target = None
+          entry_pattern = re.compile(
+              r'^\s*([A-F0-9]{24}) /\* ([^*]+) \*/ = \{\s*(.*?)^\s*\};',
+              flags=re.M | re.S,
+          )
+          for match in entry_pattern.finditer(section_match.group(1)):
+              target_id, comment_name, body = match.groups()
+              if 'productType = "com.apple.product-type.application";' not in body:
+                  continue
+              name_match = re.search(r'\bname = (?:"([^"]+)"|([^;]+));', body)
+              target_name = (name_match.group(1) or name_match.group(2)).strip() if name_match else comment_name.strip()
+              product_match = re.search(r'productName = ([^;]+);', body)
+              product_name = product_match.group(1).strip().strip('"') if product_match else target_name
+              app_target = (target_id, target_name, product_name)
+              break
+
+          if not app_target:
+              raise SystemExit("ERROR: No iOS application target found in project.pbxproj")
+
+          target_id, target_name, product_name = app_target
+          project_container = "container:" + project_path.name
+          def esc(value: str) -> str:
+              return html.escape(value, quote=True)
+
+          reference = (
+              '<BuildableReference BuildableIdentifier="primary" '
+              f'BlueprintIdentifier="{esc(target_id)}" '
+              f'BuildableName="{esc(product_name)}.app" '
+              f'BlueprintName="{esc(target_name)}" '
+              f'ReferencedContainer="{esc(project_container)}"/>'
+          )
+          scheme = f'''<?xml version="1.0" encoding="UTF-8"?>
+          <Scheme LastUpgradeVersion="1600" version="1.7">
+             <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
+                <BuildActionEntries>
+                   <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+                      {reference}
+                   </BuildActionEntry>
+                </BuildActionEntries>
+             </BuildAction>
+             <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher" shouldUseLaunchSchemeArgsEnv="YES">
+                <Testables/>
+             </TestAction>
+             <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES">
+                <BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable>
+             </LaunchAction>
+             <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES">
+                <BuildableProductRunnable runnableDebuggingMode="0">{reference}</BuildableProductRunnable>
+             </ProfileAction>
+             <AnalyzeAction buildConfiguration="Debug"/>
+             <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="NO"/>
+          </Scheme>
+          '''
+          scheme_dir = project_path / "xcshareddata" / "xcschemes"
+          scheme_dir.mkdir(parents=True, exist_ok=True)
+          scheme_file = scheme_dir / f"{target_name}.xcscheme"
+          scheme_file.write_text(scheme, encoding="utf-8")
+
+          with github_env.open("a", encoding="utf-8") as handle:
+              handle.write(f"SCHEME_NAME={target_name}\n")
+              handle.write(f"PRODUCT_NAME={product_name}\n")
+              handle.write(f"SWIFT_SOURCE_DIR={project_path.parent / 'SchwungPocket'}\n")
+          print(f"Created shared scheme: {scheme_file}")
+          print(f"App target: {target_name} (ID {target_id}), product: {product_name}.app")
+          PY
+
+      - name: Validate Swift syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$SWIFT_SOURCE_DIR" ]]; then
+            echo "ERROR: Swift source directory not found: $SWIFT_SOURCE_DIR" >&2
+            find "$(dirname "$PROJECT_PATH")" -maxdepth 3 -type f -name '*.swift' -print >&2 || true
+            exit 1
+          fi
+          SWIFT_FILES=()
+          while IFS= read -r file; do
+            SWIFT_FILES+=("$file")
+          done < <(find "$SWIFT_SOURCE_DIR" -maxdepth 1 -type f -name '*.swift' -print | sort)
+          if [[ "${#SWIFT_FILES[@]}" -eq 0 ]]; then
+            echo "ERROR: No Swift source files found in $SWIFT_SOURCE_DIR" >&2
+            exit 1
+          fi
+          printf 'Parsing Swift source: %s\n' "${SWIFT_FILES[@]}"
+          swiftc -frontend -parse "${SWIFT_FILES[@]}"
+          echo "Swift syntax parsing passed. Full iOS type-checking will be performed by xcodebuild next."
+
+      - name: Inspect Xcode project and scheme
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            xcodebuild -version
+            xcodebuild -list -project "$PROJECT_PATH"
+          } 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
 
       - name: Build unsigned iPhone app
         shell: bash
@@ -76,7 +203,7 @@ jobs:
           set -o pipefail
           xcodebuild \
             -project "$PROJECT_PATH" \
-            -target SchwungPocket \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -84,21 +211,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+            build 2>&1 | tee -a "$RUNNER_TEMP/xcodebuild.log"
 
-          APP="$(find "$DERIVED/Build/Products" -maxdepth 4 -type d -name 'SchwungPocket.app' -print -quit || true)"
+          APP="$(find "$DERIVED/Build/Products" -type d -name "$PRODUCT_NAME.app" -print -quit || true)"
           if [[ -z "$APP" ]]; then
-            echo "ERROR: Build completed without a SchwungPocket.app bundle." >&2
-            find "$DERIVED/Build/Products" -maxdepth 5 -print 2>/dev/null | head -100 >&2 || true
+            echo "ERROR: Build completed without $PRODUCT_NAME.app." >&2
+            find "$DERIVED/Build/Products" -maxdepth 6 -print 2>/dev/null | head -120 >&2 || true
             exit 1
           fi
+
           STAGE="$RUNNER_TEMP/SchwungPocketIpaStage"
-          rm -rf "$STAGE"
+          IPA="$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
+          rm -rf "$STAGE" "$IPA"
           mkdir -p "$STAGE/Payload"
-          /usr/bin/ditto "$APP" "$STAGE/Payload/SchwungPocket.app"
-          (cd "$STAGE" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa" Payload)
-          test -s "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
-          ls -lh "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
+          /usr/bin/ditto "$APP" "$STAGE/Payload/$PRODUCT_NAME.app"
+          (cd "$STAGE" && /usr/bin/zip -qry "$IPA" Payload)
+          test -s "$IPA"
+          echo "Created unsigned IPA package: $IPA"
+          /usr/bin/stat -f 'IPA size: %z bytes' "$IPA"
 
       - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
@@ -106,4 +236,13 @@ jobs:
           name: SchwungPocket-unsigned-ipa
           path: SchwungPocket-unsigned.ipa
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build log for troubleshooting
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchwungPocket-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: warn
           retention-days: 7
