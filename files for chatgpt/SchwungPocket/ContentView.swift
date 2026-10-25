@@ -36,7 +36,8 @@ struct ContentView: View {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
         // Migrate v0.4.2's saved order, which included Vault and had no Modules tab.
         if storedTabOrder.contains("vault") || !saved.contains(.modules) {
-            return [.home, .modules, .mirror, .manager, .settings]
+            // Migrate older saved orders without dropping the new Files destination.
+            return [.home, .modules, .mirror, .manager, .files, .settings]
         }
         return saved + PocketTab.allCases.filter { !saved.contains($0) }
     }
@@ -1512,7 +1513,8 @@ private struct ConnectionSettingsScreen: View {
     private var orderedTabNames: [PocketTab] {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
         if storedTabOrder.contains("vault") || !saved.contains(.modules) {
-            return [.home, .modules, .mirror, .manager, .settings]
+            // Migrate older saved orders without dropping the new Files destination.
+            return [.home, .modules, .mirror, .manager, .files, .settings]
         }
         return saved + PocketTab.allCases.filter { !saved.contains($0) }
     }
