@@ -58,7 +58,7 @@ struct ContentView: View {
         case .files:
             FilesScreen(device: device)
         case .mirror:
-            MirrorScreen(device: device)
+            MirrorScreen(device: device, navigationHidden: navigationHidden, navigationAutoHideEnabled: navigationAutoHideEnabled)
         case .settings:
             ConnectionSettingsScreen(device: device)
         }
@@ -1302,6 +1302,8 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
 
 private struct MirrorScreen: View {
     @ObservedObject var device: MoveConnectionStore
+    let navigationHidden: Bool
+    let navigationAutoHideEnabled: Bool
     @State private var reloadToken = UUID()
     @State private var isFullScreen = false
     @State private var recordTrigger: UUID?
@@ -1393,6 +1395,9 @@ private struct MirrorScreen: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(Theme.background.opacity(0.96))
+                // Keep mirror recording controls clear of the app footer. When auto-hide
+                // removes the footer, let this toolbar settle against the bottom edge.
+                .padding(.bottom, (!navigationHidden || !navigationAutoHideEnabled) ? 62 : 0)
 
 
             }
