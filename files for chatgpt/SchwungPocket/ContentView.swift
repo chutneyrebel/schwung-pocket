@@ -74,12 +74,16 @@ struct ContentView: View {
 }
 
 private enum FavoriteDestination: String, CaseIterable, Identifiable {
-    case manager, mirror, files, settings
+    case modules, nativeControls, sampleLab, grooveToolkit, manager, mirror, files, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .modules: return "Modules"
+        case .nativeControls: return "SchwungTroller"
+        case .sampleLab: return "Sample Lab"
+        case .grooveToolkit: return "Groove Toolkit"
         case .manager: return "Manager"
         case .mirror: return "Screen mirror"
         case .files: return "Files"
@@ -89,7 +93,11 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .manager: return "Modules, files, config"
+        case .modules: return "Browse installed companion modules"
+        case .nativeControls: return "Live instrument controls"
+        case .sampleLab: return "Audition samples on iPhone"
+        case .grooveToolkit: return "Build and export MIDI grooves"
+        case .manager: return "Schwung Manager pages"
         case .mirror: return "Move display + LEDs"
         case .files: return "Browse files on Move"
         case .settings: return "Device address and status"
@@ -98,6 +106,10 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .modules: return "square.grid.2x2.fill"
+        case .nativeControls: return "dial.medium"
+        case .sampleLab: return "waveform"
+        case .grooveToolkit: return "circle.grid.3x3.fill"
         case .manager: return "slider.horizontal.3"
         case .mirror: return "rectangle.inset.filled"
         case .files: return "folder"
@@ -107,6 +119,10 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
 
     var tint: Color {
         switch self {
+        case .modules: return Theme.violet
+        case .nativeControls: return Theme.accent
+        case .sampleLab: return Theme.blue
+        case .grooveToolkit: return Theme.violet
         case .manager: return Theme.violet
         case .mirror: return Theme.blue
         case .files: return Theme.accent
@@ -123,8 +139,9 @@ private struct HomeScreen: View {
     let openVault: () -> Void
     let openSettings: () -> Void
 
-    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "manager,mirror,vault"
+    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "manager,mirror,files"
     @State private var showingFavouriteEditor = false
+    @State private var quickModule: PocketStudioModule?
 
     private var favouriteDestinations: [FavoriteDestination] {
         let selected = favouriteIDs.split(separator: ",").map(String.init)
@@ -151,6 +168,12 @@ private struct HomeScreen: View {
             .sheet(isPresented: $showingFavouriteEditor) {
                 FavouriteActionsEditor(favouriteIDs: $favouriteIDs)
                     .preferredColorScheme(.dark)
+            }
+            .sheet(item: $quickModule) { module in
+                NavigationStack {
+                    module.destination(device: device)
+                }
+                .preferredColorScheme(.dark)
             }
         }
     }
@@ -314,6 +337,10 @@ private struct HomeScreen: View {
 
     private func open(_ destination: FavoriteDestination) {
         switch destination {
+        case .modules: openModules()
+        case .nativeControls: quickModule = .nativeControls
+        case .sampleLab: quickModule = .sampleLab
+        case .grooveToolkit: quickModule = .grooveToolkit
         case .manager: openManager()
         case .mirror: openMirror()
         case .files: openVault()
