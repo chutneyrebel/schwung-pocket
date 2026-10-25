@@ -19,6 +19,29 @@ struct ManagerWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
+        let audioContextObserver = WKUserScript(
+            source: #"""
+            (() => {
+              const contexts = window.__spAudioContexts = window.__spAudioContexts || [];
+              for (const name of ['AudioContext', 'webkitAudioContext']) {
+                const Original = window[name];
+                if (!Original || Original.__spWrapped) continue;
+                function WrappedAudioContext(...args) {
+                  const context = new Original(...args);
+                  contexts.push(context);
+                  return context;
+                }
+                WrappedAudioContext.prototype = Original.prototype;
+                Object.setPrototypeOf(WrappedAudioContext, Original);
+                WrappedAudioContext.__spWrapped = true;
+                window[name] = WrappedAudioContext;
+              }
+            })();
+            """#,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        configuration.userContentController.addUserScript(audioContextObserver)
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.backgroundColor = UIColor(red: 0.055, green: 0.067, blue: 0.09, alpha: 1.0)
         webView.isOpaque = false
@@ -179,9 +202,15 @@ struct ManagerWebView: UIViewRepresentable {
               if (unmute) unmute.click();
               let mediaCount = 0;
               document.querySelectorAll('audio,video').forEach(media => { media.muted = false; media.volume = 1; mediaCount++; const p = media.play(); if (p && p.catch) p.catch(() => {}); });
-              const audioContext = window.AudioContext || window.webkitAudioContext;
-              if (audioContext && window.__spAudioContext && window.__spAudioContext.state === 'suspended') window.__spAudioContext.resume().catch(() => {});
-              return (unmute || mediaCount > 0) ? 'enabled' : 'not-found';
+              const contexts = window.__spAudioContexts || [];
+              let resumedContexts = 0;
+              contexts.forEach(context => {
+                if (context && context.state !== 'closed') {
+                  if (context.state === 'suspended') context.resume().catch(() => {});
+                  resumedContexts++;
+                }
+              });
+              return (unmute || mediaCount > 0 || resumedContexts > 0) ? 'enabled' : 'not-found';
             })();
             """#
             webView.evaluateJavaScript(script) { [weak self] result, error in
