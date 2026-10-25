@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 
 private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
-    case home, modules, mirror, manager, settings
+    case home, modules, mirror, manager, files, settings
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -11,6 +11,7 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
         case .modules: return "Modules"
         case .mirror: return "Mirror"
         case .manager: return "Manager"
+        case .files: return "Files"
         case .settings: return "Settings"
         }
     }
@@ -20,6 +21,7 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
         case .modules: return "square.grid.2x2.fill"
         case .mirror: return "rectangle.inset.filled"
         case .manager: return "slider.horizontal.3"
+        case .files: return "folder"
         case .settings: return "gearshape"
         }
     }
@@ -43,11 +45,13 @@ struct ContentView: View {
     private func content(for tab: PocketTab) -> some View {
         switch tab {
         case .home:
-            HomeScreen(device: device, openModules: { selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .settings }, openSettings: { selectedTab = .settings })
+            HomeScreen(device: device, openModules: { selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
         case .modules:
             ModuleHubScreen(device: device, showsCloseButton: false)
         case .manager:
             ManagerScreen(device: device)
+        case .files:
+            FilesScreen(device: device)
         case .mirror:
             MirrorScreen(device: device)
         case .settings:
@@ -70,7 +74,7 @@ struct ContentView: View {
 }
 
 private enum FavoriteDestination: String, CaseIterable, Identifiable {
-    case manager, mirror, vault, settings
+    case manager, mirror, files, settings
 
     var id: String { rawValue }
 
@@ -78,7 +82,7 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
         switch self {
         case .manager: return "Manager"
         case .mirror: return "Screen mirror"
-        case .vault: return "Sample & Set Vault"
+        case .files: return "Files"
         case .settings: return "Connection settings"
         }
     }
@@ -87,7 +91,7 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
         switch self {
         case .manager: return "Modules, files, config"
         case .mirror: return "Move display + LEDs"
-        case .vault: return "Audio, Sets, tags and backups"
+        case .files: return "Browse files on Move"
         case .settings: return "Device address and status"
         }
     }
@@ -96,7 +100,7 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
         switch self {
         case .manager: return "slider.horizontal.3"
         case .mirror: return "rectangle.inset.filled"
-        case .vault: return "archivebox"
+        case .files: return "folder"
         case .settings: return "network"
         }
     }
@@ -105,7 +109,7 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
         switch self {
         case .manager: return Theme.violet
         case .mirror: return Theme.blue
-        case .vault: return Theme.accent
+        case .files: return Theme.accent
         case .settings: return Theme.warning
         }
     }
@@ -312,7 +316,7 @@ private struct HomeScreen: View {
         switch destination {
         case .manager: openManager()
         case .mirror: openMirror()
-        case .vault: openVault()
+        case .files: openVault()
         case .settings: openSettings()
         }
     }
@@ -1159,6 +1163,28 @@ private struct ManagerScreen: View {
     }
 }
 
+private struct FilesScreen: View {
+    @ObservedObject var device: MoveConnectionStore
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let url = device.filesURL {
+                    ManagerWebView(url: url)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    InvalidAddressView()
+                }
+            }
+            .background(Theme.background)
+            .navigationTitle("Files")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+}
+
 private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
     case both, top, bottom
     var id: String { rawValue }
@@ -1612,14 +1638,14 @@ private struct ConnectionSettingsScreen: View {
 
                     PocketCard {
                         VStack(alignment: .leading, spacing: 10) {
-                            Label("Sample & Set Vault", systemImage: "archivebox")
+                            Label("Files on Move", systemImage: "folder")
                                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                            Text("Import audio and project files, preview samples, and manage local backups.")
+                            Text("Browse and manage files stored on your Ableton Move through Schwung Manager.")
                                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
                             NavigationLink {
-                                BackupVaultScreen()
+                                FilesScreen(device: device)
                             } label: {
-                                Label("Open Vault", systemImage: "arrow.up.right.square")
+                                Label("Open Files", systemImage: "folder")
                                     .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.background)
                                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
