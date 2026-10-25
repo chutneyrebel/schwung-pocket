@@ -1572,6 +1572,8 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.SelectedMoveID.v1") private var selectedMoveID = ""
     @AppStorage("SchwungPocket.DefaultMoveID.v1") private var defaultMoveID = ""
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
+    @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
 
