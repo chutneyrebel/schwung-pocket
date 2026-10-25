@@ -1319,11 +1319,11 @@ private struct MirrorScreen: View {
                     Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                         .accessibilityLabel("Open full-screen mirror")
                 }
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Theme.surface)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Theme.background.opacity(0.96))
 
 
             }
