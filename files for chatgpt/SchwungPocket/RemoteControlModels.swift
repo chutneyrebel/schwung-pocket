@@ -40,13 +40,9 @@ enum RemoteWireTarget: Equatable {
 
 /// Single place that maps UI destinations to protocol addressing.
 ///
-/// UNVERIFIED DETAILS (isolated here on purpose):
-/// - Slots 1-4 use `slot == N`. This preserves v0.8.1 behaviour (the stepper label equalled the
-///   wire value, and the observed traffic for the user's "slot 2" carried `"slot":2`). Whether the
-///   Manager is 0-based internally has not been confirmed. Change `slotWireOffset` if testing shows
-///   Slot 1 is wire slot 0.
-/// - Master FX and Tool: the observed traffic only covers instrument slots. No evidence of how the
-///   Remote UI addresses them exists in the project, so nothing is sent for them.
+/// Verified against on-device tests: UI Slots 1-4 map to wire slot values 0-3.
+/// Master FX and Tool remain unverified: no observed Remote UI addressing exists for them, so no
+/// messages are sent to those destinations until the Manager's actual traffic is captured.
 enum RemoteProtocolAdapter {
     static let slotWireOffset = -1
 
