@@ -104,6 +104,8 @@ struct RemoteParameter: Identifiable, Hashable {
             return options.isEmpty ? .readOnly(reason: "Choice parameter without options") : .choice
         case "init":
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
+        case "filepath", "canvas":
+            return .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
         default:
             return .readOnly(reason: "Unsupported control type “\(type)”.")
         }
