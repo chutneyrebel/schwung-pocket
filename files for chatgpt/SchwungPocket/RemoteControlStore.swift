@@ -113,11 +113,11 @@ final class RemoteControlStore: ObservableObject {
     private func refreshOtherLevel() {
         guard !levels.isEmpty else { return }
         let baseLevels = levels.filter { $0.id != "other" }
-        let referencedKeys = Set(baseLevels.flatMap(\\.parameterKeys))
+        let referencedKeys = Set(baseLevels.flatMap(\.parameterKeys))
         let unassigned = parameters
             .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
             .sorted(by: parameterDisplayOrder)
-            .map(\\.wireKey)
+            .map(\.wireKey)
 
         levels = baseLevels
         if !unassigned.isEmpty {
