@@ -31,7 +31,7 @@ final class RemoteControlStore: ObservableObject {
 
     @Published private(set) var connection: ConnectionState = .disconnected
     @Published private(set) var loadState: LoadState = .idle
-    @Published private(set) var destination: RemoteDestination = .slot2
+    @Published private(set) var destination: RemoteDestination = .slot1
     @Published private(set) var instrumentName = ""
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
@@ -320,7 +320,7 @@ final class RemoteControlStore: ObservableObject {
     // These five keys and their wire encodings are defined by Schwung Manager's Remote UI.
     // They are independent of the loaded instrument's module parameter metadata.
     var slotVolume: Double {
-        let raw = values["slot:volume"].flatMap(Double.init) ?? 1.0
+        let raw = values["slot:volume"].flatMap { Double($0) } ?? 1.0
         return min(max(raw, 0), 4)
     }
 
