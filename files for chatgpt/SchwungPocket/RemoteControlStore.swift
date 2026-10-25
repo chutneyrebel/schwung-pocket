@@ -441,9 +441,11 @@ final class RemoteControlStore: ObservableObject {
             found.append(RemoteLevel(id: id, name: name, parameterKeys: keys))
         }
         found.sort { left, right in
-            if left.id == "root" { return true }
+            if left.id == "root" { return right.id != "root" }
             if right.id == "root" { return false }
-            return left.name.localizedCaseInsensitiveCompare(right.name) == .orderedAscending
+            let comparison = left.name.localizedCaseInsensitiveCompare(right.name)
+            if comparison != .orderedSame { return comparison == .orderedAscending }
+            return left.id < right.id
         }
         levels = found
         if !found.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = found.first?.id ?? "root" }
