@@ -1,4 +1,4 @@
-name: Build Schwung Pocket IPA
+name: Compile iOS app in cloud
 
 on:
   workflow_dispatch:
@@ -7,49 +7,76 @@ permissions:
   contents: read
 
 jobs:
-  build-unsigned-ipa:
-    name: Compile iOS app in cloud
+  build:
+    name: Build Schwung Pocket IPA
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Extract project source
+      - name: Find and extract project source (with diagnostics)
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -f "SchwungPocket-Starter.zip" ]]; then
-            echo "Missing SchwungPocket-Starter.zip in the repository root." >&2
+          echo "Repository root: $GITHUB_WORKSPACE"
+          echo "Repository files (first 100):"
+          find "$GITHUB_WORKSPACE" -maxdepth 4 -type f -not -path '*/.git/*' -print | head -100
+
+          ZIP_FILE="$(find "$GITHUB_WORKSPACE" -type f \( -iname 'SchwungPocket-Starter.zip' -o -iname '*SchwungPocket*Starter*.zip' \) -not -path '*/.git/*' -print -quit)"
+          if [[ -z "${ZIP_FILE:-}" ]]; then
+            echo "ERROR: Could not find SchwungPocket-Starter.zip (or a similarly named Starter ZIP) anywhere in the repository." >&2
+            echo "Upload the ZIP into the repository and commit it, or extract the source files directly into the repository." >&2
             exit 1
           fi
-          mkdir -p "$RUNNER_TEMP/schwungpocket-source"
-          unzip -q "SchwungPocket-Starter.zip" -d "$RUNNER_TEMP/schwungpocket-source"
-          test -d "$RUNNER_TEMP/schwungpocket-source/SchwungPocket/SchwungPocket.xcodeproj"
+          echo "Using source archive: $ZIP_FILE"
 
-      - name: Build for iPhone (no local Xcode needed)
+          SOURCE_ROOT="$RUNNER_TEMP/schwungpocket-source"
+          mkdir -p "$SOURCE_ROOT"
+          unzip -q "$ZIP_FILE" -d "$SOURCE_ROOT"
+
+          echo "Extracted files (first 100):"
+          find "$SOURCE_ROOT" -maxdepth 6 -print | head -100
+          PROJECT="$(find "$SOURCE_ROOT" -type d -name '*.xcodeproj' -print -quit)"
+          if [[ -z "${PROJECT:-}" ]]; then
+            echo "ERROR: No .xcodeproj directory found inside the archive." >&2
+            echo "Check that the uploaded ZIP is the original SchwungPocket-Starter.zip, not a different archive." >&2
+            exit 1
+          fi
+          echo "PROJECT_PATH=$PROJECT" >> "$GITHUB_ENV"
+          echo "Found Xcode project: $PROJECT"
+
+      - name: Show Xcode version and project targets
         shell: bash
         run: |
           set -euo pipefail
-          PROJECT="$RUNNER_TEMP/schwungpocket-source/SchwungPocket/SchwungPocket.xcodeproj"
+          xcodebuild -version
+          xcodebuild -list -project "$PROJECT_PATH"
+
+      - name: Build for iPhone (unsigned)
+        shell: bash
+        run: |
+          set -euo pipefail
           DERIVED="$RUNNER_TEMP/SchwungPocketDerivedData"
           xcodebuild \
-            -project "$PROJECT" \
+            -project "$PROJECT_PATH" \
             -target SchwungPocket \
             -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
             -derivedDataPath "$DERIVED" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
-            build
+            build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
 
-          APP="$DERIVED/Build/Products/Release-iphoneos/SchwungPocket.app"
-          if [[ ! -d "$APP" ]]; then
-            echo "Build succeeded but SchwungPocket.app was not found at: $APP" >&2
+          APP="$(find "$DERIVED/Build/Products" -maxdepth 3 -type d -name 'SchwungPocket.app' -print -quit)"
+          if [[ -z "${APP:-}" ]]; then
+            echo "ERROR: Build command finished but SchwungPocket.app was not found." >&2
+            echo "Build output folders:" >&2
+            find "$DERIVED/Build/Products" -maxdepth 4 -print 2>/dev/null | head -100 >&2 || true
             exit 1
           fi
+          echo "Found built app: $APP"
 
           STAGE="$RUNNER_TEMP/SchwungPocketIpaStage"
           rm -rf "$STAGE"
@@ -57,7 +84,7 @@ jobs:
           /usr/bin/ditto "$APP" "$STAGE/Payload/SchwungPocket.app"
           (cd "$STAGE" && /usr/bin/zip -qry "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa" Payload)
           test -s "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
-          echo "Created unsigned IPA: $GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
+          ls -lh "$GITHUB_WORKSPACE/SchwungPocket-unsigned.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
