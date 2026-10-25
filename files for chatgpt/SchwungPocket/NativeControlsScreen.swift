@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Native Controls module: destination selector + metadata-driven parameter controls.
+/// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
     @StateObject private var remote = RemoteControlStore()
@@ -12,14 +12,12 @@ struct NativeControlsScreen: View {
     var body: some View {
         ModuleScreenShell(
             eyebrow: "SCHWUNG POCKET / MODULE",
-            title: "Native Controls",
+            title: "SchwungTroller",
             subtitle: "Live knobs and switches built from the instrument's own metadata."
         ) {
             connectionCard
             destinationCard
             contentSection
-            Text("Experimental protocol integration. Test at a safe listening level; parameter names and ranges depend on the loaded module.")
-                .font(.system(size: 10)).lineSpacing(2).foregroundStyle(Theme.muted)
         }
         .onAppear {
             if remote.connection == .disconnected { remote.connect(address: device.addressText) }
