@@ -77,6 +77,7 @@ struct ContentView: View {
             }
         }
         .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
+        .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
         .onAppear { scheduleNavigationHide() }
         .onChange(of: selectedTab) { _ in revealNavigation() }
         .onChange(of: navigationAutoHideEnabled) { enabled in
