@@ -30,7 +30,11 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
 struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
     @State private var selectedTab: PocketTab = .home
+    @State private var navigationHidden = false
+    @State private var navigationHideTask: Task<Void, Never>?
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
+    @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
 
     private var orderedTabs: [PocketTab] {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
@@ -64,13 +68,79 @@ struct ContentView: View {
         TabView(selection: $selectedTab) {
             ForEach(orderedTabs) { tab in
                 content(for: tab)
-                    .tabItem { Label(tab.title, systemImage: tab.symbol) }
                     .tag(tab)
             }
         }
-        .toolbarBackground(Theme.background, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
+        .toolbar(.hidden, for: .tabBar)
         .background(Theme.background.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !navigationHidden || !navigationAutoHideEnabled {
+                bottomNavigation
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
+        .onAppear { scheduleNavigationHide() }
+        .onChange(of: selectedTab) { _ in revealNavigation() }
+        .onChange(of: navigationAutoHideEnabled) { enabled in
+            if enabled { scheduleNavigationHide() }
+            else {
+                navigationHideTask?.cancel()
+                withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+            }
+        }
+        .onChange(of: navigationAutoHideSeconds) { _ in scheduleNavigationHide() }
+        .onDisappear { navigationHideTask?.cancel() }
+    }
+
+    private var bottomNavigation: some View {
+        HStack(spacing: 0) {
+            ForEach(orderedTabs) { tab in
+                Button {
+                    selectedTab = tab
+                    revealNavigation()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: tab.symbol)
+                            .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .regular))
+                        Text(tab.title)
+                            .font(.system(size: 10, weight: selectedTab == tab ? .semibold : .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selectedTab == tab ? Theme.accent : Theme.muted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.top, 4)
+        .background(Theme.background.opacity(0.98))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+        }
+    }
+
+    private func revealNavigation() {
+        withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+        scheduleNavigationHide()
+    }
+
+    private func scheduleNavigationHide() {
+        navigationHideTask?.cancel()
+        guard navigationAutoHideEnabled else {
+            withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+            return
+        }
+        navigationHideTask = Task { @MainActor in
+            let seconds = max(3, min(60, navigationAutoHideSeconds))
+            try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { navigationHidden = true }
+        }
     }
 }
 
@@ -1678,6 +1748,29 @@ private struct ConnectionSettingsScreen: View {
                                     .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.background)
                                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                    }
+
+                    PocketCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Bottom navigation auto-hide", systemImage: "rectangle.bottomthird.inset.filled")
+                                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                            Text("Keep the screen clear while using Move controls. Tap anywhere to bring navigation back.")
+                                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                            Toggle("Hide navigation automatically", isOn: $navigationAutoHideEnabled)
+                                .font(.system(size: 13, weight: .medium))
+                                .tint(Theme.accent)
+                            if navigationAutoHideEnabled {
+                                Picker("Hide after", selection: $navigationAutoHideSeconds) {
+                                    Text("3 seconds").tag(3)
+                                    Text("5 seconds").tag(5)
+                                    Text("10 seconds").tag(10)
+                                    Text("15 seconds").tag(15)
+                                    Text("30 seconds").tag(30)
+                                    Text("60 seconds").tag(60)
+                                }
+                                .tint(Theme.accent)
                             }
                         }
                     }
