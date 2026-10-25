@@ -132,6 +132,9 @@ final class RemoteControlStore: ObservableObject {
             if comparison != .orderedSame { return comparison == .orderedAscending }
             return left.id < right.id
         }
+        if !levels.contains(where: { $0.id == selectedLevelID }) {
+            selectedLevelID = levels.first?.id ?? "root"
+        }
     }
 
     /// Full metadata dump for bug reports (no addresses, no values).
