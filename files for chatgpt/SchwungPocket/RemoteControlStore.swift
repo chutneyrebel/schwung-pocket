@@ -680,20 +680,38 @@ final class RemoteControlStore: ObservableObject {
             }
             let originalScheme = (addressURL.scheme ?? "https").lowercased()
             let schemes = originalScheme == "https" ? ["https", "http"] : [originalScheme]
+            var lookupDiagnostics: [String] = []
             for scheme in schemes {
-                guard var parts = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
+                guard var parts = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else {
+                    lookupDiagnostics.append("\(scheme): invalid URL components")
+                    continue
+                }
                 parts.scheme = scheme
                 parts.host = host
                 parts.path = "/api/slot-modules"
                 parts.query = nil
                 parts.fragment = nil
-                guard let url = parts.url else { continue }
+                guard let url = parts.url else {
+                    lookupDiagnostics.append("\(scheme): invalid endpoint URL")
+                    continue
+                }
                 do {
                     var request = URLRequest(url: url)
                     request.timeoutInterval = 5
                     let (data, response) = try await URLSession.shared.data(for: request)
-                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
-                    guard let installed = try? JSONDecoder().decode([RemoteSlotModule].self, from: data) else { continue }
+                    guard let http = response as? HTTPURLResponse else {
+                        lookupDiagnostics.append("\(scheme): no HTTP response")
+                        continue
+                    }
+                    guard (200...299).contains(http.statusCode) else {
+                        lookupDiagnostics.append("\(scheme): HTTP \(http.statusCode)")
+                        continue
+                    }
+                    guard let installed = try? JSONDecoder().decode([RemoteSlotModule].self, from: data) else {
+                        let preview = String(data: data.prefix(180), encoding: .utf8) ?? "<non-text response>"
+                        lookupDiagnostics.append("\(scheme): response was not a module array (\(preview))")
+                        continue
+                    }
                     let match = installed.first(where: { $0.id == module.id && $0.componentType == "audio_fx" })
                         ?? installed.first(where: {
                             $0.name.caseInsensitiveCompare(module.name) == .orderedSame
@@ -704,12 +722,20 @@ final class RemoteControlStore: ObservableObject {
                         self.sendMasterFXLoad(module: module, component: component, dspPath: path)
                         return
                     }
+                    let matchingDetails = installed
+                        .filter { $0.id.caseInsensitiveCompare(module.id) == .orderedSame
+                            || $0.name.caseInsensitiveCompare(module.name) == .orderedSame }
+                        .map { "id=\($0.id), name=\($0.name), type=\($0.componentType), dsp_path=\($0.dsp_path ?? "nil")" }
+                    lookupDiagnostics.append("\(scheme): decoded \(installed.count) modules; matching entries: \(matchingDetails.isEmpty ? "none" : matchingDetails.joined(separator: "; "))")
+                    RemoteDiagnostics.log("Master FX installed-list lookup diagnostics: \(lookupDiagnostics.last ?? "no detail")")
                 } catch {
+                    lookupDiagnostics.append("\(scheme): \(error.localizedDescription)")
                     RemoteDiagnostics.log("Master FX direct DSP lookup failed on \(scheme): \(error.localizedDescription)")
                 }
             }
-            self.slotModulesError = "Schwung's installed-module list did not return a DSP path for \(module.name)."
-            RemoteDiagnostics.log("Master FX swap failed: installed list has no DSP path for module=\(module.id)")
+            let detail = lookupDiagnostics.joined(separator: " | ")
+            self.slotModulesError = "Couldn't resolve \(module.name)'s DSP path. \(detail)"
+            RemoteDiagnostics.log("Master FX swap failed: module=\(module.id); \(detail)")
         }
     }
 
