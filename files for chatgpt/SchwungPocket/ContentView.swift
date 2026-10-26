@@ -122,7 +122,7 @@ struct ContentView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: footerVisible)
         }
-        .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
+        .simultaneousGesture(TapGesture().onEnded { if selectedTab != .mirror { revealNavigation() } })
         .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
         .onAppear { scheduleNavigationHide() }
         .onChange(of: selectedTab) { _ in revealNavigation() }
