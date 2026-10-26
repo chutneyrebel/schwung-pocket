@@ -585,12 +585,47 @@ final class RemoteControlStore: ObservableObject {
             slotModulesError = "That effect has no usable DSP path or cannot be loaded from the app."
             return
         }
-        parameters.removeAll { $0.component == component }
-        values = values.filter { !$0.key.hasPrefix(component + ":") }
-        lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        slotModulesError = nil
+        clearComponentPresentation(component)
         beginLoading()
         send(["type": "set_master_fx_param", "key": "\(component):module", "value": dspPath])
         RemoteDiagnostics.log("Requested Master FX swap: component=\(component) module=\(module.id)")
+        refreshMasterFXAfterModuleAction()
+    }
+
+    /// The Master FX loader reports the final chain asynchronously. Request a
+    /// fresh listing as a fallback so the UI also recovers if a notification is
+    /// delayed or missed.
+    private func refreshMasterFXAfterModuleAction() {
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard let self, self.isConnected, case .masterFX = self.wireTarget else { return }
+            self.send(["type": "subscribe_master_fx"])
+        }
+    }
+
+    func clearMasterFXModule(component: String) {
+        guard isConnected, case .masterFX = wireTarget else { return }
+        guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
+            slotModulesError = "This Master FX position cannot be cleared from the app."
+            return
+        }
+        guard componentNames[component] != nil else { return }
+        slotModulesError = nil
+        clearComponentPresentation(component)
+        beginLoading()
+        // Schwung's Remote UI uses an empty DSP path to unload a Master FX
+        // position. "none" is only the track-slot convention.
+        send(["type": "set_master_fx_param", "key": "\(component):module", "value": ""])
+        RemoteDiagnostics.log("Requested Master FX clear: component=\(component)")
+        refreshMasterFXAfterModuleAction()
+    }
+
+    private func clearComponentPresentation(_ component: String) {
+        parameters.removeAll { $0.component == component }
+        values = values.filter { !$0.key.hasPrefix(component + ":") }
+        lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        customComponentUIURLs.removeValue(forKey: component)
     }
 
     // MARK: Parameter intents
@@ -1072,6 +1107,16 @@ final class RemoteControlStore: ObservableObject {
             audioFXCapacity = min(max(cap, 1), 8)
         }
 
+        // slot_info is the authoritative chain listing. Remove stale controls
+        // as soon as a component changes or disappears, rather than waiting for
+        // a later page refresh or parameter response.
+        let previousNames = componentNames
+        let changedComponents = Set(previousNames.keys).union(names.keys).filter {
+            previousNames[$0] != names[$0]
+        }
+        for component in changedComponents {
+            clearComponentPresentation(component)
+        }
         componentNames = names
         let allSectionsKnown = synthKnown && !unknownSections.contains("midi_fx") && !unknownSections.contains("fx")
         if allSectionsKnown && names.isEmpty {
