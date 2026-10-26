@@ -124,7 +124,13 @@ struct NativeControlsScreen: View {
                     Text(remote.instrumentName.isEmpty ? " " : remote.instrumentName)
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent).lineLimit(1)
                 }
-                DestinationSelector(selection: remote.destination) { destination in
+                DestinationSelector(
+                    selection: remote.destination,
+                    isMuted: remote.isSlotMuted,
+                    isSoloed: remote.isSlotSoloed,
+                    onMuteToggle: { slot, muted in remote.setSlotMuted(muted, slot: slot) },
+                    onSoloToggle: { slot, soloed in remote.setSlotSoloed(soloed, slot: slot) }
+                ) { destination in
                     withAnimation(.easeInOut(duration: 0.16)) {
                         selectedChainComponent = .instrument
                         remote.select(destination)
@@ -561,32 +567,81 @@ struct NativeControlsScreen: View {
 /// Six tappable boxes in a 3x2 grid. Fits narrow iPhones without horizontal scrolling or clipping.
 struct DestinationSelector: View {
     let selection: RemoteDestination
+    let isMuted: (Int) -> Bool
+    let isSoloed: (Int) -> Bool
+    let onMuteToggle: (Int, Bool) -> Void
+    let onSoloToggle: (Int, Bool) -> Void
     let onSelect: (RemoteDestination) -> Void
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+
+    private func wireSlot(for destination: RemoteDestination) -> Int? {
+        switch destination {
+        case .slot1: return 0
+        case .slot2: return 1
+        case .slot3: return 2
+        case .slot4: return 3
+        case .masterFX, .tool: return nil
+        }
+    }
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(RemoteDestination.allCases) { destination in
                 let isSelected = destination == selection
-                Button { onSelect(destination) } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: destination.symbol).font(.system(size: 15, weight: .semibold))
-                        Text(destination.title)
-                            .font(.system(size: 12, weight: .bold))
-                            .lineLimit(1).minimumScaleFactor(0.75)
+                let slot = wireSlot(for: destination)
+                VStack(spacing: 6) {
+                    Button { onSelect(destination) } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: destination.symbol).font(.system(size: 15, weight: .semibold))
+                            Text(destination.title)
+                                .font(.system(size: 12, weight: .bold))
+                                .lineLimit(1).minimumScaleFactor(0.75)
+                        }
+                        .foregroundStyle(isSelected ? Theme.background : Color.white)
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(isSelected ? Theme.background : Color.white)
-                    .frame(maxWidth: .infinity, minHeight: 54)
-                    .background(isSelected ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
-                            .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(destination.title)
+                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+
+                    if let slot {
+                        HStack(spacing: 6) {
+                            Button {
+                                onMuteToggle(slot, !isMuted(slot))
+                            } label: {
+                                Text("M")
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 23)
+                                    .foregroundStyle(isMuted(slot) ? Color.white : Theme.muted)
+                                    .background(isMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Slot \(slot + 1) mute")
+                            .disabled(false)
+
+                            Button {
+                                onSoloToggle(slot, !isSoloed(slot))
+                            } label: {
+                                Text("S")
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 23)
+                                    .foregroundStyle(isSoloed(slot) ? Theme.background : Theme.muted)
+                                    .background(isSoloed(slot) ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Slot \(slot + 1) solo")
+                        }
                     }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(destination.title)
-                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+                .padding(7)
+                .frame(maxWidth: .infinity, minHeight: slot == nil ? 66 : 78)
+                .background(isSelected ? Theme.accent.opacity(0.13) : Theme.surfaceRaised.opacity(0.45), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                }
             }
         }
     }
