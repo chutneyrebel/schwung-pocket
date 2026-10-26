@@ -159,7 +159,8 @@ final class RemoteControlStore: ObservableObject {
     /// Full metadata dump for bug reports (no addresses, no values).
     var metadataReport: String {
         let header = "destination=\(destination.title) instrument=\(instrumentName)"
-        return ([header] + parameters.map { RemoteDiagnostics.describe($0) }).joined(separator: "\n")
+        return ([header] + parameters.map { RemoteDiagnostics.describe($0) }).joined(separator: "
+")
     }
 
     // MARK: Connection lifecycle
@@ -547,7 +548,12 @@ final class RemoteControlStore: ObservableObject {
     var slotReceiveChannel: String { values["slot:receive_channel"] ?? "0" }
     var slotForwardChannel: String { values["slot:forward_channel"] ?? "-1" }
 
-    func refreshSlotMixStates() {\n        guard isConnected else { return }\n        for slot in 0...3 { subscribe(to: .slot(slot)) }\n    }\n\n    func setSlotVolume(_ proposed: Double) {
+    func refreshSlotMixStates() {
+        guard isConnected else { return }
+        for slot in 0...3 { subscribe(to: .slot(slot)) }
+    }
+
+    func setSlotVolume(_ proposed: Double) {
         let stepped = (min(max(proposed, 0), 4) / 0.05).rounded() * 0.05
         setSlotSetting("slot:volume", value: String(format: "%.2f", stepped))
     }
