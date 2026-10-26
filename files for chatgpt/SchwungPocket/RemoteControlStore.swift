@@ -472,6 +472,26 @@ final class RemoteControlStore: ObservableObject {
         RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
     }
 
+    /// Removes the module from a slot chain position using Schwung's
+    /// documented remote-UI convention: write "none" to "<component>:module".
+    func clearSlotModule(component: String) {
+        guard isConnected, case .slot(let slot) = wireTarget else { return }
+        let isInstrument = component == "synth"
+        let isMIDI = component.hasPrefix("midi_fx") && Int(component.dropFirst("midi_fx".count)) != nil
+        let isAudio = component.hasPrefix("fx") && Int(component.dropFirst(2)) != nil
+        guard isInstrument || isMIDI || isAudio else {
+            slotModulesError = "This chain position cannot be cleared from the app."
+            return
+        }
+        guard componentNames[component] != nil else { return }
+        parameters.removeAll { $0.component == component }
+        values = values.filter { !$0.key.hasPrefix(component + ":") }
+        lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        beginLoading()
+        send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": "none"])
+        RemoteDiagnostics.log("Requested module clear: slot=\(slot) component=\(component)")
+    }
+
     func swapMasterFXModule(component: String, moduleID: String) {
         guard isConnected, case .masterFX = wireTarget else { return }
         guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
