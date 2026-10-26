@@ -32,7 +32,7 @@ struct ContentView: View {
     @State private var selectedTab: PocketTab = .home
     @State private var navigationHidden = false
     @State private var navigationHideTask: Task<Void, Never>?
-    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
+    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,files,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
     @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
 
@@ -43,7 +43,9 @@ struct ContentView: View {
             // Migrate older saved orders without dropping the new Files destination.
             return [.home, .modules, .mirror, .manager, .files, .settings]
         }
-        return saved + PocketTab.allCases.filter { !saved.contains($0) }
+        // Always keep Settings at the far right, including for users with an older saved tab order.
+        let completed = saved + PocketTab.allCases.filter { !saved.contains($0) }
+        return completed.filter { $0 != .settings } + [.settings]
     }
 
     @ViewBuilder
@@ -216,7 +218,7 @@ private struct HomeScreen: View {
     let openVault: () -> Void
     let openSettings: () -> Void
 
-    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "manager,mirror,files"
+    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "modules,nativeControls,sampleLab,grooveToolkit,manager,mirror,files,settings"
     @State private var showingFavouriteEditor = false
     @State private var quickModule: PocketStudioModule?
 
