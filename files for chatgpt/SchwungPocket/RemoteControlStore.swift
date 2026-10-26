@@ -953,7 +953,16 @@ final class RemoteControlStore: ObservableObject {
     private func handleMasterFXChainParams(_ message: [String: Any]) {
         guard let component = message["component"] as? String,
               component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil,
-              let items = message["data"] as? [[String: Any]] else { return }
+              let items = message["data"] as? [[String: Any]] else {
+            RemoteDiagnostics.log("Master FX chain_params missing a valid component or parameter array")
+            return
+        }
+        // A late chain_params response can arrive after an effect was removed
+        // directly on the Move. Do not resurrect controls for an empty position.
+        guard componentNames[component] != nil else {
+            RemoteDiagnostics.log("ignored Master FX parameters for empty position \(component)")
+            return
+        }
         let parsed = items.compactMap { RemoteParameter.parse($0, component: component) }
         parameters = parameters.filter { $0.component != component } + parsed
         loadState = .loaded
