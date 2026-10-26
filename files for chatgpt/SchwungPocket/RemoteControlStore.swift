@@ -318,6 +318,22 @@ final class RemoteControlStore: ObservableObject {
 
     func select(_ newDestination: RemoteDestination) {
         guard newDestination != destination else { return }
+
+        // Schwung's Remote UI explicitly supports these unsubscribe messages.
+        // Release the global Master FX / Tool subscriptions when leaving them;
+        // slot subscriptions stay active because the mixer tiles need live state
+        // for all four slots, including the non-selected ones.
+        if isConnected {
+            switch wireTarget {
+            case .masterFX:
+                send(["type": "unsubscribe_master_fx"])
+            case .tool:
+                send(["type": "unsubscribe_tool"])
+            case .slot, .unverified:
+                break
+            }
+        }
+
         destination = newDestination
         clearPresentedData()
         switch wireTarget {
