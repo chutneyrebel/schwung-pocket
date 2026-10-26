@@ -18,10 +18,10 @@
 
 ### Instrument and FX hot-swapping
 - Added installed-module discovery using Schwung's `/api/slot-modules` endpoint.
-- Added a Swap action for the currently selected synth, MIDI FX or audio FX chain position.
+- Added a Swap action for the currently selected synth, MIDI FX, audio FX or Master FX position.
 - The picker filters modules by compatible chain position and excludes modules marked as device-only.
 - A confirmation step appears before replacing a loaded module.
-- Writes use Schwung's documented `set_param` protocol with keys such as `synth:module`, `midi_fx1:module` and `fx1:module`.
+- Slot-chain writes use Schwung's `set_param` protocol with keys such as `synth:module`, `midi_fx1:module` and `fx1:module`; Master FX uses `set_master_fx_param` with the selected effect's discovered DSP path.
 - **Status:** implemented in source; requires a successful build and physical Move verification. Older Schwung builds without the module-list endpoint will show an explanatory error rather than guess module IDs.
 
 ### Per-slot mute and solo
@@ -208,6 +208,7 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 
 - Physical Move regression of Master FX parameter writes after recent changes, despite the user's confirmation that Master FX works.
 - Physical Move verification of instrument/FX hot-swapping and M/S mixer controls.
+- Tool discovery/UI still needs a targeted retest with the user's `drums practice` Tool.
 - Physical Move verification that the `drums practice` Tool identity, state and custom UI appear correctly.
 - Full Mirror display/scaling validation. Mirror audio has been confirmed working by the user.
 - Transport controls (play/stop and related actions) still need protocol investigation/validation and are not a release blocker for unrelated features.
