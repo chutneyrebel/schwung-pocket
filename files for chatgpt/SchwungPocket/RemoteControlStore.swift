@@ -540,6 +540,10 @@ final class RemoteControlStore: ObservableObject {
 
     /// Schwung's chain host exposes per-module bypass flags independently of
     /// a module's own parameter metadata. This is distinct from slot mute.
+    func hasComponentBypassState(_ component: String) -> Bool {
+        values[component + ":bypassed"] != nil
+    }
+
     func isComponentBypassed(_ component: String) -> Bool {
         let key = component + ":bypassed"
         return values[key] == "1" || values[key] == "true"
