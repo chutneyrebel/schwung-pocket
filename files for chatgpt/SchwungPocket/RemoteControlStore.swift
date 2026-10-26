@@ -371,7 +371,7 @@ final class RemoteControlStore: ObservableObject {
         isLoadingSlotModules = true
         slotModulesError = nil
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let input = trimmed.contains("://") ? trimmed : "https://\\(trimmed)"
+        let input = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
         guard !trimmed.isEmpty,
               var addressComponents = URLComponents(string: input),
               let originalScheme = addressComponents.scheme?.lowercased(),
@@ -380,8 +380,8 @@ final class RemoteControlStore: ObservableObject {
             isLoadingSlotModules = false
             slotModulesError = trimmed.isEmpty
                 ? "Move address is empty. Set it in Settings, then retry module discovery."
-                : "Move address '\\(trimmed)' could not be parsed. Use move.local:7700 or the Move IP with port 7700."
-            RemoteDiagnostics.log("slot module discovery rejected address: '\\(trimmed)'")
+                : "Move address '\(trimmed)' could not be parsed. Use move.local:7700 or the Move IP with port 7700."
+            RemoteDiagnostics.log("slot module discovery rejected address: '\(trimmed)'")
             return
         }
         addressComponents.path = ""
@@ -415,16 +415,16 @@ final class RemoteControlStore: ObservableObject {
                     guard !Task.isCancelled else { return }
                     self?.availableSlotModules = modules
                     self?.slotModulesError = modules.isEmpty ? "Schwung returned no installed modules for this device." : nil
-                    RemoteDiagnostics.log("slot module catalogue loaded from \\(url.absoluteString): \\(modules.count) modules")
+                    RemoteDiagnostics.log("slot module catalogue loaded from \(url.absoluteString): \(modules.count) modules")
                     return
                 } catch {
                     lastError = error
-                    RemoteDiagnostics.log("slot module catalogue failed at \\(url.absoluteString): \\(error.localizedDescription)")
+                    RemoteDiagnostics.log("slot module catalogue failed at \(url.absoluteString): \(error.localizedDescription)")
                 }
             }
             guard !Task.isCancelled else { return }
             self?.slotModulesError = "Could not load /api/slot-modules over HTTPS or HTTP. Check that Schwung is updated and that the Move address includes the correct port."
-            if let lastError { RemoteDiagnostics.log("slot module catalogue exhausted fallbacks: \\(lastError.localizedDescription)") }
+            if let lastError { RemoteDiagnostics.log("slot module catalogue exhausted fallbacks: \(lastError.localizedDescription)") }
         }
     }
 
