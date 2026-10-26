@@ -123,7 +123,12 @@ struct ManagerWebView: UIViewRepresentable {
               if (!window.__spMirrorChromeObserver) {
                 window.__spMirrorChromeObserver = new MutationObserver(() => {
                   if (window.__spMirrorChromeTimer) clearTimeout(window.__spMirrorChromeTimer);
-                  window.__spMirrorChromeTimer = setTimeout(() => { try { window.__spApplyMirrorLayout && window.__spApplyMirrorLayout(); } catch (_) {} }, 120);
+                  window.__spMirrorChromeTimer = setTimeout(() => {
+                    try {
+                      window.__spApplyMirrorLayout && window.__spApplyMirrorLayout();
+                      window.__spHideMirrorPortalChrome && window.__spHideMirrorPortalChrome();
+                    } catch (_) {}
+                  }, 120);
                 });
                 window.__spMirrorChromeObserver.observe(document.documentElement, {childList:true, subtree:true});
               }
@@ -176,6 +181,7 @@ struct ManagerWebView: UIViewRepresentable {
                 el.style.display = 'none';
               }
               // Remove the portal's duplicate status/capture toolbar; native controls are above.
+              window.__spHideMirrorPortalChrome = () => {
               for (const el of document.querySelectorAll('body *')) {
                 const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
                 if (text.length > 520 || !/(screen\s*\+\s*device|screen|device)/i.test(text) || !/save png/i.test(text) || !/log/i.test(text) || !/record/i.test(text)) continue;
@@ -189,6 +195,8 @@ struct ManagerWebView: UIViewRepresentable {
                 if (!candidate.dataset.spMirrorCaptureToolbar) candidate.dataset.spMirrorCaptureToolbar = candidate.style.display || '__default__';
                 candidate.style.display = 'none';
               }
+              };
+              window.__spHideMirrorPortalChrome();
               roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
