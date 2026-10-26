@@ -231,38 +231,48 @@ final class RemoteControlStore: ObservableObject {
 
     private func run(task: URLSessionWebSocketTask, generation: Int) async {
         do {
+            // Subscribe to the active destination first. The detailed UI should
+            // not wait for the four mixer subscriptions before becoming live.
+            let activeSlot: Int?
             switch wireTarget {
             case .slot(let slot):
-                // Keep all four mixer tiles live while the selected slot owns
-                // the detailed parameter view. Schwung supports multiple slot
-                // subscriptions on one Remote UI WebSocket.
-                for subscribedSlot in 0...3 {
-                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
-                    guard generation == connectionGeneration else { return }
-                }
+                activeSlot = slot
+                try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": slot])))
+                guard generation == connectionGeneration else { return }
                 beginLoading()
             case .masterFX:
-                for subscribedSlot in 0...3 {
-                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
-                    guard generation == connectionGeneration else { return }
-                }
+                activeSlot = nil
                 try await task.send(.string(Self.jsonString(["type": "subscribe_master_fx"])))
                 guard generation == connectionGeneration else { return }
                 beginLoading()
             case .tool:
-                for subscribedSlot in 0...3 {
-                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
-                    guard generation == connectionGeneration else { return }
-                }
+                activeSlot = nil
                 try await task.send(.string(Self.jsonString(["type": "subscribe_tool"])))
                 guard generation == connectionGeneration else { return }
                 beginLoading()
             case .unverified:
-                break
+                activeSlot = nil
             }
+
             guard generation == connectionGeneration else { return }
             connection = .connected
             retryAttempt = 0
+
+            // Mixer tiles are secondary to the selected destination. Subscribe
+            // after the receive loop starts so their setup cannot delay the UI.
+            Task { [weak self] in
+                for subscribedSlot in 0...3 where subscribedSlot != activeSlot {
+                    guard !Task.isCancelled,
+                          await self?.isCurrentGeneration(generation) == true else { return }
+                    do {
+                        try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
+                    } catch {
+                        RemoteDiagnostics.log("background mixer subscription failed for slot \(subscribedSlot): \(error.localizedDescription)")
+                        return
+                    }
+                }
+            }
+
             while !Task.isCancelled {
                 let message = try await task.receive()
                 guard generation == connectionGeneration else { return }
@@ -276,6 +286,10 @@ final class RemoteControlStore: ObservableObject {
             guard generation == connectionGeneration, !Task.isCancelled else { return }
             handleConnectionLoss(error)
         }
+    }
+
+    private func isCurrentGeneration(_ generation: Int) -> Bool {
+        generation == connectionGeneration && wantsConnection
     }
 
     private func handleConnectionLoss(_ error: Error) {
