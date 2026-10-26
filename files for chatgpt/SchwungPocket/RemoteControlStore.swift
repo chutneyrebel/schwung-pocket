@@ -37,6 +37,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var midiFXCapacity = 1
     @Published private(set) var audioFXCapacity = 2
     @Published private(set) var masterFXCapacity = 4
+    @Published private(set) var customToolUIURL: String?
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -331,6 +332,7 @@ final class RemoteControlStore: ObservableObject {
         midiFXCapacity = 1
         audioFXCapacity = 2
         masterFXCapacity = 4
+        customToolUIURL = nil
         parameters = []
         levels = []
         values = [:]
@@ -484,6 +486,14 @@ final class RemoteControlStore: ObservableObject {
             handleToolInfo(message)
             return
         }
+        if type == "custom_ui" {
+            guard case .tool = wireTarget,
+                  message["component"] as? String == "tool" else { return }
+            let url = message["url"] as? String ?? ""
+            customToolUIURL = url.isEmpty ? nil : url
+            RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
+            return
+        }
         if type == "error" {
             let messageText = message["message"] as? String ?? "Schwung Manager returned an error."
             RemoteDiagnostics.log("server error: \(messageText)")
@@ -563,6 +573,7 @@ final class RemoteControlStore: ObservableObject {
 
     private func handleToolInfo(_ message: [String: Any]) {
         instrumentName = (message["id"] as? String) ?? ""
+        if instrumentName.isEmpty { customToolUIURL = nil }
         parameters = []
         values = [:]
         lastSent = [:]
