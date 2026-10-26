@@ -149,6 +149,7 @@ struct NativeControlsScreen: View {
                 DestinationSelector(
                     selection: remote.destination,
                     isConnected: remote.isConnected,
+                    slotInstrumentNames: remote.slotInstrumentNames,
                     isMuted: remote.isSlotMuted,
                     isSoloed: remote.isSlotSoloed,
                     onMuteToggle: { slot, muted in remote.setSlotMuted(muted, slot: slot) },
@@ -675,6 +676,7 @@ struct NativeControlsScreen: View {
 struct DestinationSelector: View {
     let selection: RemoteDestination
     let isConnected: Bool
+    let slotInstrumentNames: [Int: String]
     let isMuted: (Int) -> Bool
     let isSoloed: (Int) -> Bool
     let onMuteToggle: (Int, Bool) -> Void
@@ -702,7 +704,7 @@ struct DestinationSelector: View {
                     Button { onSelect(destination) } label: {
                         VStack(spacing: 4) {
                             Image(systemName: destination.symbol).font(.system(size: 15, weight: .semibold))
-                            Text(destination.title)
+                            Text(slot.flatMap { slotInstrumentNames[$0] } ?? (slot.map { "Slot \($0 + 1)" } ?? destination.title))
                                 .font(.system(size: 12, weight: .bold))
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
@@ -711,7 +713,7 @@ struct DestinationSelector: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(destination.title)
+                    .accessibilityLabel(slot.flatMap { slotInstrumentNames[$0] } ?? (slot.map { "Slot \($0 + 1)" } ?? destination.title))
                     .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
 
                     if let slot {
