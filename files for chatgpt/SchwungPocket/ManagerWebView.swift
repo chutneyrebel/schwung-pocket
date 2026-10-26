@@ -141,26 +141,17 @@ struct ManagerWebView: UIViewRepresentable {
             let script = #"""
             (() => {
               if (window.__spMIDIEventBridgeInstalled) return;
-              const button = document.getElementById('logbtn');
               const log = document.getElementById('log');
-              if (!button || !log) return;
-              if (!button.classList.contains('on')) button.click();
-              // Keep Schwung's own log renderer running, but move its panel off-screen
-              // so it does not cover the mirrored Move display.
-              log.style.setProperty('position', 'fixed', 'important');
-              log.style.setProperty('left', '-10000px', 'important');
-              log.style.setProperty('top', '0', 'important');
-              log.style.setProperty('width', '320px', 'important');
-              log.style.setProperty('height', '320px', 'important');
-              log.style.setProperty('overflow', 'hidden', 'important');
+              const hero = document.getElementById('hero');
+              if (!log || !hero) return;
 
               let lastEvent = '';
               let lastCount = null;
               let rawSurfaceAvailable = false;
               const post = event => window.webkit.messageHandlers.schwungMIDIEvent.postMessage(event);
 
-              // Read the same shared-memory event ring used by Schwung's visible Log.
-              // This preserves the actual CC number/value and note/velocity where available.
+              // Keep the native page's Log button and panel untouched. The shared
+              // event ring supplies live data without changing the user's UI state.
               const pollSurfaceEvents = () => {
                 try {
                   if (typeof surfView === 'undefined' || typeof OFF === 'undefined' ||
@@ -169,7 +160,7 @@ struct ManagerWebView: UIViewRepresentable {
                   const count = surfView.getUint32(OFF.evCount, true);
                   if (lastCount === null) { lastCount = count; return; }
                   if (count === lastCount) return;
-                  if (count < lastCount) { lastCount = count; return; } // counter wrapped
+                  if (count < lastCount) { lastCount = count; return; }
                   const first = Math.max(lastCount, count - N_EVENTS);
                   for (let eventIndex = first; eventIndex < count; eventIndex++) {
                     const offset = OFF.events + (eventIndex % N_EVENTS) * 8;
@@ -178,20 +169,19 @@ struct ManagerWebView: UIViewRepresentable {
                     if (type === 0x90 || type === 0x80) {
                       const noteOn = type === 0x90 && data2 > 0;
                       const label = typeof noteName === 'function' ? noteName(data1) : ('Note ' + data1);
-                      post({ kind: 'note', label, action: noteOn ? ('↓ velocity ' + data2) : '↑ note off', note: data1, velocity: data2, pressed: noteOn });
+                      post({ kind: 'note', label, action: noteOn ? ('velocity ' + data2) : 'note off', note: data1, velocity: data2, pressed: noteOn });
                     } else if (type === 0xB0) {
                       const label = (typeof CC_NAMES !== 'undefined' && CC_NAMES[data1]) ? CC_NAMES[data1] : ('CC ' + data1);
                       post({ kind: 'cc', label, action: 'value ' + data2, controller: data1, value: data2 });
                     }
                   }
                   lastCount = count;
-                } catch (_) {
-                  // Older Schwung pages may not expose the event ring to injected scripts.
-                }
+                } catch (_) {}
               };
 
+              // Fallback only reads the Log if the user has enabled it themselves.
               const publishLatestLogRow = () => {
-                if (rawSurfaceAvailable) return;
+                if (rawSurfaceAvailable || log.classList.contains('hidden')) return;
                 const row = log.querySelector('.row');
                 if (!row) return;
                 const cells = [...row.querySelectorAll('span')];
@@ -206,10 +196,38 @@ struct ManagerWebView: UIViewRepresentable {
                 post({ kind: 'log', label, action, age });
               };
               new MutationObserver(publishLatestLogRow).observe(log, { childList: true, subtree: true, characterData: true });
+
+              // Native Schwung Mirror fullscreen hides all page siblings except #hero.
+              // This small overlay restores access to the existing audio and recording
+              // buttons without changing the mirror's own tap-to-fullscreen gesture.
+              const controls = document.createElement('div');
+              controls.id = 'sp-mirror-fullscreen-controls';
+              controls.innerHTML = '<button type="button" data-action="audio">Audio</button><button type="button" data-action="record">Record</button>';
+              const style = document.createElement('style');
+              style.textContent = `
+                body.fs > #sp-mirror-fullscreen-controls { display:flex !important; }
+                #sp-mirror-fullscreen-controls { display:none; position:fixed; z-index:2147483647; top:max(8px, env(safe-area-inset-top)); right:max(8px, env(safe-area-inset-right)); gap:6px; padding:5px; border-radius:12px; background:rgba(12,16,24,.92); border:1px solid rgba(255,255,255,.2); }
+                #sp-mirror-fullscreen-controls button { border:0; border-radius:8px; padding:9px 12px; color:#fff; background:#30394a; font:600 13px -apple-system,BlinkMacSystemFont,sans-serif; }
+                #sp-mirror-fullscreen-controls button[data-action="record"] { background:#8d2632; }
+              `;
+              document.head.appendChild(style);
+              document.body.appendChild(controls);
+              const audioButton = controls.querySelector('[data-action="audio"]');
+              const recordButton = controls.querySelector('[data-action="record"]');
+              const muteButton = document.getElementById('mute');
+              const recButton = document.getElementById('rec');
+              const refreshControlLabels = () => {
+                if (muteButton) audioButton.textContent = /unmute/i.test(muteButton.textContent || '') ? 'Enable audio' : 'Mute audio';
+                if (recButton) recordButton.textContent = /stop/i.test(recButton.textContent || '') ? 'Stop recording' : 'Record';
+              };
+              audioButton.addEventListener('click', event => { event.stopPropagation(); if (muteButton) muteButton.click(); refreshControlLabels(); });
+              recordButton.addEventListener('click', event => { event.stopPropagation(); if (recButton) recButton.click(); setTimeout(refreshControlLabels, 80); });
+              new MutationObserver(refreshControlLabels).observe(document.body, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['class','disabled'] });
+              refreshControlLabels();
+
               window.__spMIDIEventBridgeInstalled = true;
               pollSurfaceEvents();
               window.__spMIDIEventPoll = setInterval(pollSurfaceEvents, 80);
-              publishLatestLogRow();
             })();
             """#
             webView.evaluateJavaScript(script, completionHandler: nil)
@@ -238,7 +256,15 @@ struct ManagerWebView: UIViewRepresentable {
                 // without inserting DOM nodes. Watch those state changes, but not
                 // style attributes, which this script itself modifies.
                 window.__spMirrorChromeObserver = new MutationObserver((records) => {
-                  if (records.some(record => record.type === 'childList' ||
+                  // The /mirror page owns its body.fs class and canvas visibility.
+                  // Re-applying the generic layout during that toggle can reorder
+                  // zero-sized roots and leave the canvas black after the second tap.
+                  const relevant = records.filter(record => !(
+                    location.pathname === '/mirror' &&
+                    record.target === document.body &&
+                    record.attributeName === 'class'
+                  ));
+                  if (relevant.some(record => record.type === 'childList' ||
                       ['class', 'hidden', 'aria-expanded', 'data-state'].includes(record.attributeName))) {
                     scheduleMirrorRefresh();
                   }
