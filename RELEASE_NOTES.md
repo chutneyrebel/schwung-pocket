@@ -16,6 +16,26 @@
 
 ## New additions in the current development line
 
+### Instrument and FX hot-swapping
+- Added installed-module discovery using Schwung's `/api/slot-modules` endpoint.
+- Added a Swap action for the currently selected synth, MIDI FX or audio FX chain position.
+- The picker filters modules by compatible chain position and excludes modules marked as device-only.
+- A confirmation step appears before replacing a loaded module.
+- Writes use Schwung's documented `set_param` protocol with keys such as `synth:module`, `midi_fx1:module` and `fx1:module`.
+- **Status:** implemented in source; requires a successful build and physical Move verification. Older Schwung builds without the module-list endpoint will show an explanatory error rather than guess module IDs.
+
+### Per-slot mute and solo
+- Added M and S toggle buttons inside each of the four Slot destination tiles.
+- The app subscribes to all four slot mixer states so each tile can reflect the Move's reported mute/solo state while the detailed controls remain focused on one destination.
+- Toggles send the existing `set_param` keys `slot:muted` and `slot:soloed` to the corresponding wire slot.
+- Controls are disabled while the remote connection is down.
+- **Status:** implemented in source; actual mixer response and state synchronisation require physical Move verification.
+
+### Tool status visibility
+- Added a Tool status card to show the detected Tool ID, whether Schwung advertised a custom web panel, and any flat Tool state values that were received.
+- Repeated Tool discovery messages no longer clear already received state when the Tool ID has not changed.
+- **Status:** improved diagnostics and state handling implemented; the user's reported `drums practice` Tool still requires a targeted hardware retest to confirm the missing information is resolved.
+
 ### Tool custom Web UI panel
 - Added handling for Schwung's `custom_ui` message for the Tool target, including the advertised component and URL.
 - Added an embedded WebKit panel for a supported Tool custom UI URL.
@@ -41,7 +61,7 @@
 - Connection probe timeout and visible connection state.
 - Mirror and Manager screens access the Move-hosted web interfaces over the local network.
 - Foreground/background recovery support exists in the remote-control connection flow.
-- **Known limitation:** an earlier Android 4.4.4 browser/mirror attempt displayed mostly text and the mirror display was reported not working. Do not treat Mirror as hardware-verified; retest it on the iPhone and Move.
+- **Known limitation:** an earlier Android 4.4.4 browser/mirror attempt displayed mostly text. The user has now confirmed Mirror audio works. Continue to regression-test the iPhone mirror's display, scaling and interaction separately.
 
 ### SchwungTroller / Native Controls
 - Destination selection for supported instrument slots and remote-control targets.
@@ -61,7 +81,7 @@
 - Parses parameter metadata and values for the selected Master FX component.
 - Uses Schwung's `set_master_fx_param` write message for supported parameter changes.
 - Improved handling of unknown/invalid Master FX listings, preserving known names where appropriate and clearing discovery timeout state.
-- **Status:** code path implemented; live discovery, metadata, values and writes still require a fresh physical Move test.
+- **Status:** user has confirmed Master FX works on their Move. Re-test discovery, values and parameter writes during regression testing.
 
 ### Tool protocol and parameter safety
 - Added Tool subscription/discovery handling and processing of `tool_info` and Tool parameter updates.
@@ -150,16 +170,26 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 - [ ] Test no Master FX, unknown/invalid listing and reconnect behaviour.
 - [ ] Confirm the UI does not display positions beyond the reported capacity.
 
-### F. Tools and custom UI
-- [ ] Load a Tool in Schwung and use Reload/discovery.
-- [ ] Confirm Tool identity/state appears even if flat parameter values are absent.
-- [ ] If `custom_ui` is advertised, verify the embedded panel loads.
+### F. Slot mixer and hot-swap
+- [ ] Confirm M/S toggles appear inside Slot 1, Slot 2, Slot 3 and Slot 4 tiles.
+- [ ] Toggle mute and solo for each slot and confirm the physical Move responds.
+- [ ] Change mute/solo on the Move and confirm the four app tiles update.
+- [ ] Open Swap for the synth, a MIDI FX position and an audio FX position.
+- [ ] Confirm the picker lists installed modules of the correct type and excludes device-only modules.
+- [ ] Confirm the replacement prompt appears before the write.
+- [ ] Swap one test module, confirm the chain name changes, and verify the new parameters are loaded.
+- [ ] Test unavailable module endpoint, failed load and an empty FX position without leaving stale controls.
+
+### G. Tools and custom UI
+- [ ] Load the `drums practice` Tool in Schwung and select Tool in SchwungTroller.
+- [ ] Confirm Tool identity/status appears even if flat parameter values are absent.
+- [ ] If `custom_ui` is advertised, verify the embedded panel loads and is interactive.
 - [ ] Verify the panel stays on the Move host and uses the expected standalone Tool mode.
 - [ ] Test a Tool with no custom UI and confirm a clear empty-state message.
 - [ ] Check navigation, scrolling, layout, and recovery after Tool unload/reload.
 - [ ] Confirm generic Tool values without metadata remain read-only.
 
-### G. Sample Lab, Groove Toolkit and Files
+### H. Sample Lab, Groove Toolkit and Files
 - [ ] Import an audio file into Sample Lab and audition/play it.
 - [ ] Verify local sample listing/shelf persists as intended.
 - [ ] Do not assume sample transfer to Move; record separately if tested.
@@ -167,7 +197,7 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 - [ ] Export the one-bar MIDI file and verify it opens/plays in a suitable MIDI app/DAW.
 - [ ] Open Files, browse/navigate, and verify the expected Schwung file interface and actions.
 
-### H. Stability and reporting
+### I. Stability and reporting
 - [ ] Check for stuck loading indicators, stale values or duplicate controls.
 - [ ] Disconnect/reconnect during a screen session.
 - [ ] Repeat key checks after force-quitting and relaunching.
@@ -176,10 +206,10 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 
 ## Known pending items
 
-- Physical Move verification of Master FX parameter writes.
-- Physical Move verification of Tool custom UI URL and embedded WebKit compatibility.
-- Full Mirror validation; prior mirror display attempt was reported as failing.
-- Mirror audio behaviour remains untested.
+- Physical Move regression of Master FX parameter writes after recent changes, despite the user's confirmation that Master FX works.
+- Physical Move verification of instrument/FX hot-swapping and M/S mixer controls.
+- Physical Move verification that the `drums practice` Tool identity, state and custom UI appear correctly.
+- Full Mirror display/scaling validation. Mirror audio has been confirmed working by the user.
 - Transport controls (play/stop and related actions) still need protocol investigation/validation and are not a release blocker for unrelated features.
 - Sample transfer from Sample Lab to the Move is not confirmed.
 - Full regression pass across the entire checklist is outstanding.
