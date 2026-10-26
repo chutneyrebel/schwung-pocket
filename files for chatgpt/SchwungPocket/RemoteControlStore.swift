@@ -4,13 +4,14 @@ import SwiftUI
 /// Owns the Remote UI WebSocket, the selected destination, instrument metadata and parameter values.
 /// Views only read published state and call the intent methods; no socket code lives in views.
 ///
-/// Protocol messages used (all observed by the user in the Manager, nothing invented):
-///   out: {"type":"subscribe","slot":N}
-///   out: {"type":"set_param","slot":N,"key":"synth:cutoff","value":"0.3"}
-///   in:  slot_info, hierarchy, chain_params, param_update (each carries "slot")
+/// Protocol messages used (confirmed in Schwung's Remote UI implementation):
+///   out: subscribe / unsubscribe for slot, Master FX and Tool destinations
+///   out: set_param for slot parameters; set_master_fx_param for Master FX parameters
+///   in:  slot_info, hierarchy, chain_params, param_update, master_fx_info, tool_info
 ///
-/// NOT verified: an explicit unsubscribe message. None is sent. When the destination changes we
-/// send a new `subscribe` and ignore any message whose `slot` is not the current destination.
+/// Slot subscriptions remain active for all four mixer tiles. The global Master FX and Tool
+/// subscriptions are released when leaving those destinations. Incoming messages are filtered
+/// against the active destination before they can change the displayed controls.
 struct RemoteSlotMixState {
     var muted: Bool?
     var soloed: Bool?
