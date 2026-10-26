@@ -798,7 +798,7 @@ private struct ModuleSwapSheet: View {
                 }
             }
             .confirmationDialog(
-                "Replace \(component.title)?",
+                "Replace \(displayTitle)?",
                 isPresented: Binding(
                     get: { pendingModule != nil },
                     set: { if !$0 { pendingModule = nil } }
