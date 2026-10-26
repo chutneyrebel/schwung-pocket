@@ -155,7 +155,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, 5)
         .padding(.top, 4)
-        .background(Theme.background.opacity(0.98))
+        .background(Theme.background)
         .overlay(alignment: .top) {
             Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
         }
@@ -1556,7 +1556,7 @@ private struct FullscreenMirrorView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Theme.background.opacity(0.98), in: Capsule())
+                    .background(Theme.background, in: Capsule())
                     .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                     .padding(.horizontal, 10)
                     .padding(.top, 10)
