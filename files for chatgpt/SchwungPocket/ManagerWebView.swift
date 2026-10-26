@@ -205,13 +205,28 @@ struct ManagerWebView: UIViewRepresentable {
               controls.innerHTML = '<button type="button" data-action="audio">Audio</button><button type="button" data-action="record">Record</button>';
               const style = document.createElement('style');
               style.textContent = `
-                body.fs > #sp-mirror-fullscreen-controls { display:flex !important; }
+                body.sp-fs { padding:0 !important; justify-content:center !important; }
+                body.sp-fs > :not(#hero):not(#sp-mirror-fullscreen-controls) { display:none !important; }
+                body.sp-fs #hero { border:none !important; max-width:none !important; width:min(100vw, 200dvh) !important; cursor:zoom-out; }
+                body.sp-fs > #sp-mirror-fullscreen-controls { display:flex !important; }
                 #sp-mirror-fullscreen-controls { display:none; position:fixed; z-index:2147483647; top:max(8px, env(safe-area-inset-top)); right:max(8px, env(safe-area-inset-right)); gap:6px; padding:5px; border-radius:12px; background:rgba(12,16,24,.92); border:1px solid rgba(255,255,255,.2); }
                 #sp-mirror-fullscreen-controls button { border:0; border-radius:8px; padding:9px 12px; color:#fff; background:#30394a; font:600 13px -apple-system,BlinkMacSystemFont,sans-serif; }
                 #sp-mirror-fullscreen-controls button[data-action="record"] { background:#8d2632; }
               `;
               document.head.appendChild(style);
               document.body.appendChild(controls);
+              // Use a companion-owned fullscreen class instead of Schwung's native
+              // body.fs mode. The native rule hides every sibling except #hero and
+              // conflicts with the app's injected layout rules on some WebKit builds.
+              const hero = document.getElementById('hero');
+              if (hero && !window.__spMirrorFullscreenTapInstalled) {
+                window.__spMirrorFullscreenTapInstalled = true;
+                hero.addEventListener('click', event => {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                  document.body.classList.toggle('sp-fs');
+                }, true);
+              }
               const audioButton = controls.querySelector('[data-action="audio"]');
               const recordButton = controls.querySelector('[data-action="record"]');
               const muteButton = document.getElementById('mute');
