@@ -400,7 +400,7 @@ final class RemoteControlStore: ObservableObject {
                 guard var components = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
                 components.scheme = scheme
                 components.host = host
-                components.path = "/api/slot-modules"
+                components.path = "/api/modules"
                 components.query = nil
                 components.fragment = nil
                 guard let url = components.url else { continue }
