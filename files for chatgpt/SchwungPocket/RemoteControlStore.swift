@@ -371,13 +371,28 @@ final class RemoteControlStore: ObservableObject {
         isLoadingSlotModules = true
         slotModulesError = nil
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let addressURL = URL(string: trimmed.contains("://") ? trimmed : "https://\\(trimmed)"),
-              let host = addressURL.host else {
+        let input = trimmed.contains("://") ? trimmed : "https://\\(trimmed)"
+        guard !trimmed.isEmpty,
+              var addressComponents = URLComponents(string: input),
+              let originalScheme = addressComponents.scheme?.lowercased(),
+              ["http", "https"].contains(originalScheme),
+              let host = addressComponents.host, !host.isEmpty else {
             isLoadingSlotModules = false
-            slotModulesError = "Enter a valid Move address before loading installed modules."
+            slotModulesError = trimmed.isEmpty
+                ? "Move address is empty. Set it in Settings, then retry module discovery."
+                : "Move address '\\(trimmed)' could not be parsed. Use move.local:7700 or the Move IP with port 7700."
+            RemoteDiagnostics.log("slot module discovery rejected address: '\\(trimmed)'")
             return
         }
-        let schemes = addressURL.scheme == "https" ? ["https", "http"] : [addressURL.scheme ?? "http"]
+        addressComponents.path = ""
+        addressComponents.query = nil
+        addressComponents.fragment = nil
+        guard let addressURL = addressComponents.url else {
+            isLoadingSlotModules = false
+            slotModulesError = "Could not build a URL from the Move address. Check the address and port in Settings."
+            return
+        }
+        let schemes = originalScheme == "https" ? ["https", "http"] : [originalScheme]
         moduleCatalogTask = Task { [weak self] in
             defer { self?.isLoadingSlotModules = false }
             var lastError: Error?
