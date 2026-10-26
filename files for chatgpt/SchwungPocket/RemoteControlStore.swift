@@ -471,9 +471,45 @@ final class RemoteControlStore: ObservableObject {
                     guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                         throw URLError(.badServerResponse)
                     }
-                    let catalogue = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
+                    var catalogue = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
                     guard !Task.isCancelled else { return }
-                    // Schwung 1.7.3 serves the full catalogue at /api/modules.
+
+                    // /api/modules is the broad catalogue used by the picker, but
+                    // some versions omit dsp_path there. Master FX loads audio
+                    // effects by absolute DSP path, supplied by /api/slot-modules.
+                    // Enrich matching entries when that endpoint is available.
+                    if let slotModulesURL = URLComponents(url: url, resolvingAgainstBaseURL: false).flatMap({ components -> URL? in
+                        var components = components
+                        components.path = "/api/slot-modules"
+                        return components.url
+                    }) {
+                        do {
+                            var slotRequest = URLRequest(url: slotModulesURL)
+                            slotRequest.timeoutInterval = 5
+                            let (slotData, slotResponse) = try await URLSession.shared.data(for: slotRequest)
+                            if let http = slotResponse as? HTTPURLResponse, (200...299).contains(http.statusCode),
+                               let slotModules = try? JSONDecoder().decode([RemoteSlotModule].self, from: slotData) {
+                                let paths = Dictionary(slotModules.compactMap { module in
+                                    module.dsp_path.map { (module.id, $0) }
+                                }, uniquingKeysWith: { first, _ in first })
+                                catalogue = catalogue.map { module in
+                                    guard module.dsp_path?.isEmpty != false, let path = paths[module.id] else { return module }
+                                    return RemoteSlotModule(
+                                        id: module.id,
+                                        name: module.name,
+                                        component_type: module.component_type,
+                                        device_only: module.device_only,
+                                        dsp_path: path,
+                                        installed: module.installed,
+                                        installed_version: module.installed_version
+                                    )
+                                }
+                            }
+                        } catch {
+                            RemoteDiagnostics.log("slot module DSP-path enrichment unavailable: \(error.localizedDescription)")
+                        }
+                    }
+                    guard !Task.isCancelled else { return }
                     // Keep the picker focused on modules installed on the Move.
                     let modules = catalogue.filter { $0.installed == true }
                     self?.availableSlotModules = modules
@@ -579,10 +615,14 @@ final class RemoteControlStore: ObservableObject {
         }
         guard let module = availableSlotModules.first(where: { $0.id == moduleID }),
               module.componentType == "audio_fx",
-              !module.deviceOnly,
-              let dspPath = module.dsp_path,
+              !module.deviceOnly else {
+            slotModulesError = "That effect is not available for Master FX or must be loaded directly on the Move."
+            return
+        }
+        guard let dspPath = module.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines),
               !dspPath.isEmpty else {
-            slotModulesError = "That effect has no usable DSP path or cannot be loaded from the app."
+            slotModulesError = "Schwung did not provide a DSP path for \(module.name). Refresh the module directory or load this effect directly on the Move."
+            RemoteDiagnostics.log("Master FX swap blocked: no dsp_path for module=\(module.id)")
             return
         }
         slotModulesError = nil
