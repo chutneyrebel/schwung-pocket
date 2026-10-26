@@ -3,8 +3,22 @@ import UIKit
 import WebKit
 import Combine
 
-extension Notification.Name {
-    static let schwungMirrorMIDIEvent = Notification.Name("SchwungPocket.MirrorMIDIEvent")
+final class MirrorMIDIActivityStore: ObservableObject {
+    static let shared = MirrorMIDIActivityStore()
+
+    @Published private(set) var events: [String] = []
+
+    private init() {}
+
+    func record(_ event: [String: Any]) {
+        guard let label = event["label"] as? String,
+              let action = event["action"] as? String else { return }
+        let row = "\(label)  \(action)"
+        DispatchQueue.main.async {
+            if self.events.first != row { self.events.insert(row, at: 0) }
+            self.events = Array(self.events.prefix(5))
+        }
+    }
 }
 
 struct ManagerWebView: UIViewRepresentable {
@@ -107,7 +121,7 @@ struct ManagerWebView: UIViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.name == "schwungMIDIEvent", let event = message.body as? [String: Any] else { return }
-            NotificationCenter.default.post(name: .schwungMirrorMIDIEvent, object: nil, userInfo: event)
+            MirrorMIDIActivityStore.shared.record(event)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
