@@ -482,6 +482,27 @@ final class RemoteControlStore: ObservableObject {
             RemoteDiagnostics.log("hierarchy without levels")
             return
         }
+
+        // The instrument dropdown must only consume the instrument's hierarchy.
+        // Some Schwung builds label hierarchy messages with their chain component;
+        // others omit that field, so also reject levels named after a known FX/MIDI-FX.
+        if let component = message["component"] as? String, component != "synth" {
+            RemoteDiagnostics.log("ignored hierarchy for non-instrument component \(component)")
+            return
+        }
+        let nonInstrumentNames = Set(componentNames
+            .filter { $0.key != "synth" }
+            .map { $0.value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty })
+        if rawLevels.values.contains(where: { value in
+            guard let item = value as? [String: Any],
+                  let name = item["name"] as? String else { return false }
+            return nonInstrumentNames.contains(name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        }) {
+            RemoteDiagnostics.log("ignored hierarchy whose level name matches a non-instrument chain component")
+            return
+        }
+
         var found: [RemoteLevel] = []
         for (id, value) in rawLevels {
             guard let item = value as? [String: Any] else { continue }
