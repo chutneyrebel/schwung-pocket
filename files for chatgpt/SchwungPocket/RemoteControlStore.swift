@@ -478,41 +478,54 @@ final class RemoteControlStore: ObservableObject {
                     // some versions omit dsp_path there. Master FX loads audio
                     // effects by absolute DSP path, supplied by /api/slot-modules.
                     // Enrich matching entries when that endpoint is available.
-                    if let slotModulesURL = URLComponents(url: url, resolvingAgainstBaseURL: false).flatMap({ components -> URL? in
-                        var components = components
-                        components.path = "/api/slot-modules"
-                        return components.url
-                    }) {
+                    // The catalogue endpoint can work over HTTPS while the
+                    // slot-module endpoint only responds over HTTP on some Move
+                    // builds. Try both schemes independently; otherwise installed
+                    // audio FX lose their required Master FX DSP path.
+                    var slotModules: [RemoteSlotModule] = []
+                    for slotScheme in schemes {
+                        guard var slotComponents = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
+                        slotComponents.scheme = slotScheme
+                        slotComponents.host = host
+                        slotComponents.path = "/api/slot-modules"
+                        slotComponents.query = nil
+                        slotComponents.fragment = nil
+                        guard let slotURL = slotComponents.url else { continue }
                         do {
-                            var slotRequest = URLRequest(url: slotModulesURL)
+                            var slotRequest = URLRequest(url: slotURL)
                             slotRequest.timeoutInterval = 5
                             let (slotData, slotResponse) = try await URLSession.shared.data(for: slotRequest)
-                            if let http = slotResponse as? HTTPURLResponse, (200...299).contains(http.statusCode),
-                               let slotModules = try? JSONDecoder().decode([RemoteSlotModule].self, from: slotData) {
-                                let paths = Dictionary(slotModules.compactMap { module in
-                                    module.dsp_path.map { (module.id, $0) }
-                                }, uniquingKeysWith: { first, _ in first })
-                                catalogue = catalogue.map { module in
-                                    guard module.dsp_path?.isEmpty != false else { return module }
-                                    let path = paths[module.id]
-                                        ?? slotModules.first(where: {
-                                            $0.name.caseInsensitiveCompare(module.name) == .orderedSame
-                                                && $0.component_type == module.component_type
-                                        })?.dsp_path
-                                    guard let path, !path.isEmpty else { return module }
-                                    return RemoteSlotModule(
-                                        id: module.id,
-                                        name: module.name,
-                                        component_type: module.component_type,
-                                        device_only: module.device_only,
-                                        dsp_path: path,
-                                        installed: module.installed,
-                                        installed_version: module.installed_version
-                                    )
-                                }
+                            guard let slotHTTP = slotResponse as? HTTPURLResponse,
+                                  (200...299).contains(slotHTTP.statusCode) else { continue }
+                            if let decoded = try? JSONDecoder().decode([RemoteSlotModule].self, from: slotData) {
+                                slotModules = decoded
+                                if !slotModules.isEmpty { break }
                             }
                         } catch {
-                            RemoteDiagnostics.log("slot module DSP-path enrichment unavailable: \(error.localizedDescription)")
+                            RemoteDiagnostics.log("slot module DSP-path lookup failed on \(slotScheme): \(error.localizedDescription)")
+                        }
+                    }
+                    if !slotModules.isEmpty {
+                        let paths = Dictionary(slotModules.compactMap { module in
+                            module.dsp_path.map { (module.id, $0) }
+                        }, uniquingKeysWith: { first, _ in first })
+                        catalogue = catalogue.map { module in
+                            guard module.dsp_path?.isEmpty != false else { return module }
+                            let path = paths[module.id]
+                                ?? slotModules.first(where: {
+                                    $0.name.caseInsensitiveCompare(module.name) == .orderedSame
+                                        && $0.component_type == module.component_type
+                                })?.dsp_path
+                            guard let path, !path.isEmpty else { return module }
+                            return RemoteSlotModule(
+                                id: module.id,
+                                name: module.name,
+                                component_type: module.component_type,
+                                device_only: module.device_only,
+                                dsp_path: path,
+                                installed: module.installed,
+                                installed_version: module.installed_version
+                            )
                         }
                     }
                     guard !Task.isCancelled else { return }
@@ -656,7 +669,8 @@ final class RemoteControlStore: ObservableObject {
             slotModulesError = "This Master FX position cannot be cleared from the app."
             return
         }
-        guard componentNames[component] != nil else { return }
+        // Allow the clear command even if the latest listing omitted the name.
+        // The Move is authoritative about whether this position is occupied.
         slotModulesError = nil
         clearComponentPresentation(component)
         beginLoading()
