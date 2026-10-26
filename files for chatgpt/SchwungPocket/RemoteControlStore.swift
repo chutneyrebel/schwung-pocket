@@ -159,8 +159,7 @@ final class RemoteControlStore: ObservableObject {
     /// Full metadata dump for bug reports (no addresses, no values).
     var metadataReport: String {
         let header = "destination=\(destination.title) instrument=\(instrumentName)"
-        return ([header] + parameters.map { RemoteDiagnostics.describe($0) }).joined(separator: "
-")
+        return ([header] + parameters.map { RemoteDiagnostics.describe($0) }).joined(separator: "\n")
     }
 
     // MARK: Connection lifecycle
