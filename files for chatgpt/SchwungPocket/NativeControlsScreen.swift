@@ -68,7 +68,7 @@ struct NativeControlsScreen: View {
             else if phase == .background { remote.appDidEnterBackground() }
         }
         .sheet(isPresented: $showingModulePicker) {
-            ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent)
+            ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
         }
     }
 
@@ -337,9 +337,21 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.4)
                     .foregroundStyle(Theme.muted)
-                Text("Select a loaded master-bus effect to inspect its live parameters.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.muted)
+                HStack(alignment: .center, spacing: 10) {
+                    Text("Select a loaded master-bus effect to inspect its live parameters.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    Button {
+                        remote.loadSlotModules(address: device.addressText)
+                        showingModulePicker = true
+                    } label: {
+                        Label("Swap", systemImage: "arrow.left.arrow.right")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected)
+                }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(1...max(remote.masterFXCapacity, 1), id: \.self) { index in
                         let key = "master_fx:fx\(index)"
@@ -713,11 +725,17 @@ struct DestinationSelector: View {
 private struct ModuleSwapSheet: View {
     @ObservedObject var remote: RemoteControlStore
     let address: String
-    let component: SchwungChainComponent
+    let component: SchwungChainComponent?
+    let masterFXComponent: String?
     @Environment(\.dismiss) private var dismiss
     @State private var pendingModule: RemoteSlotModule?
 
+    private var displayTitle: String {
+        component?.title ?? masterFXComponent?.replacingOccurrences(of: "master_fx:", with: "").uppercased() ?? "Master FX"
+    }
+
     private var expectedType: String {
+        guard let component else { return "audio_fx" }
         if component.rawValue == "synth" { return "sound_generator" }
         if component.rawValue.hasPrefix("midi_fx") { return "midi_fx" }
         return "audio_fx"
@@ -733,7 +751,7 @@ private struct ModuleSwapSheet: View {
         NavigationView {
             List {
                 Section {
-                    Text("Choose an installed module for \(component.title). The selected position will be replaced on the Move.")
+                    Text("Choose an installed module for \(displayTitle). The selected position will be replaced on the Move.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -746,7 +764,7 @@ private struct ModuleSwapSheet: View {
                         Button("Retry module discovery") { remote.loadSlotModules(address: address) }
                     }
                 }
-                Section("Installed \(component.title) modules") {
+                Section("Installed \(displayTitle) modules") {
                     if choices.isEmpty {
                         Text("No compatible modules found. Check that Schwung supports /api/slot-modules and try again.")
                             .font(.system(size: 12))
@@ -764,7 +782,7 @@ private struct ModuleSwapSheet: View {
                     }
                 }
             }
-            .navigationTitle("Swap \(component.title)")
+            .navigationTitle("Swap \(displayTitle)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -785,7 +803,11 @@ private struct ModuleSwapSheet: View {
             ) {
                 if let module = pendingModule {
                     Button("Replace with \(module.name)", role: .destructive) {
-                        remote.swapModule(component: component.rawValue, moduleID: module.id)
+                        if let component {
+                            remote.swapModule(component: component.rawValue, moduleID: module.id)
+                        } else if let masterFXComponent {
+                            remote.swapMasterFXModule(component: masterFXComponent, moduleID: module.id)
+                        }
                         pendingModule = nil
                         dismiss()
                     }
