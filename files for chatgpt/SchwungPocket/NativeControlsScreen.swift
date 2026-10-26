@@ -131,6 +131,7 @@ struct NativeControlsScreen: View {
                 }
                 DestinationSelector(
                     selection: remote.destination,
+                    isConnected: remote.isConnected,
                     isMuted: remote.isSlotMuted,
                     isSoloed: remote.isSlotSoloed,
                     onMuteToggle: { slot, muted in remote.setSlotMuted(muted, slot: slot) },
@@ -628,6 +629,7 @@ struct NativeControlsScreen: View {
 /// Six tappable boxes in a 3x2 grid. Fits narrow iPhones without horizontal scrolling or clipping.
 struct DestinationSelector: View {
     let selection: RemoteDestination
+    let isConnected: Bool
     let isMuted: (Int) -> Bool
     let isSoloed: (Int) -> Bool
     let onMuteToggle: (Int, Bool) -> Void
