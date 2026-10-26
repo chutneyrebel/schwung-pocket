@@ -537,6 +537,14 @@ struct NativeControlsScreen: View {
                     }
                     .buttonStyle(StudioSecondaryButton())
                     .disabled(!remote.isConnected)
+                    Button {
+                        pendingMasterFXClearComponent = remote.selectedMasterFXComponent
+                    } label: {
+                        Label("Clear", systemImage: "xmark.circle")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected || remote.componentNames[remote.selectedMasterFXComponent] == nil)
                 }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(1...max(remote.masterFXCapacity, 1), id: \.self) { index in
@@ -573,19 +581,7 @@ struct NativeControlsScreen: View {
                                 }
                             }
                             .buttonStyle(.plain)
-                            if moduleName != nil {
-                                Button {
-                                    pendingMasterFXClearComponent = key
-                                } label: {
-                                    Image(systemName: "xmark")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .frame(width: 30, height: 30)
-                                        .foregroundStyle(Theme.warning)
-                                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Clear Master FX \(index)")
-                            }
+
                         }
                     }
                 }
