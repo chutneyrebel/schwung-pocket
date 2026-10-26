@@ -167,6 +167,20 @@ struct ManagerWebView: UIViewRepresentable {
                 if (!el.dataset.spMirrorStatusDisplay) el.dataset.spMirrorStatusDisplay = el.style.display || '__default__';
                 el.style.display = 'none';
               }
+              // Remove the portal's duplicate status/capture toolbar; native controls are above.
+              for (const el of document.querySelectorAll('body *')) {
+                const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (text.length > 260 || !/screen \\+ device/i.test(text) || !/save png/i.test(text) || !/record/i.test(text)) continue;
+                let candidate = el;
+                for (let depth = 0; depth < 4 && candidate.parentElement; depth++) {
+                  const parent = candidate.parentElement;
+                  const parentText = (parent.innerText || parent.textContent || '').replace(/\\s+/g, ' ').trim();
+                  if (parentText.length > 420) break;
+                  candidate = parent;
+                }
+                if (!candidate.dataset.spMirrorCaptureToolbar) candidate.dataset.spMirrorCaptureToolbar = candidate.style.display || '__default__';
+                candidate.style.display = 'none';
+              }
               roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
