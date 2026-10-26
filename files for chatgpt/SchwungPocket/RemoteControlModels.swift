@@ -64,6 +64,7 @@ struct RemoteSlotModule: Codable, Identifiable, Hashable {
     let name: String
     let component_type: String
     let device_only: Bool?
+    let dsp_path: String?
 
     var componentType: String { component_type }
     var deviceOnly: Bool { device_only ?? false }
