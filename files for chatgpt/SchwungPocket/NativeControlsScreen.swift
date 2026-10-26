@@ -46,9 +46,11 @@ struct NativeControlsScreen: View {
             destinationCard
             if isInstrumentSlot {
                 slotChainCard
-                slotSettingsCard
             }
             contentSection
+            if isInstrumentSlot {
+                slotSettingsCard
+            }
         }
         .onAppear {
             if remote.connection == .disconnected { remote.connect(address: device.addressText) }
@@ -118,13 +120,10 @@ struct NativeControlsScreen: View {
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent).lineLimit(1)
                 }
                 DestinationSelector(selection: remote.destination) {
-                    selectedChainComponent = .instrument
-                    remote.select($0)
-                }
-                if selectedChainComponent == .instrument && remote.levels.count > 1 {
-                    Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
-                        ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
-                    }.pickerStyle(.menu).tint(Theme.accent)
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        selectedChainComponent = .instrument
+                        remote.select($0)
+                    }
                 }
             }
         }
@@ -147,7 +146,9 @@ struct NativeControlsScreen: View {
                         let selected = selectedChainComponent == component
                         let moduleName = remote.componentNames[component.rawValue]
                         Button {
-                            selectedChainComponent = component
+                            withAnimation(.easeInOut(duration: 0.16)) {
+                                selectedChainComponent = component
+                            }
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack(spacing: 6) {
@@ -166,16 +167,38 @@ struct NativeControlsScreen: View {
                             .foregroundStyle(selected ? Theme.background : Color.white)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                             .padding(.horizontal, 10)
-                            .background(selected ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Theme.accent.opacity(selected ? 1 : 0))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
                             }
+                            .animation(.easeInOut(duration: 0.16), value: selected)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(component.title), \(moduleName ?? "not loaded")")
                     }
                 }
+                Group {
+                    if selectedChainComponent == .instrument && remote.levels.count > 1 {
+                        Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
+                            ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.accent)
+                    } else if selectedChainComponent != .instrument {
+                        Text("Controls for \(selectedChainComponent.title) appear below when Schwung reports editable parameters.")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(minHeight: 30, alignment: .leading)
+                .transition(.opacity)
             }
         }
     }
