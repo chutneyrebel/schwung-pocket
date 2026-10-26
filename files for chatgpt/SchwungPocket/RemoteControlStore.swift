@@ -36,6 +36,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var componentNames: [String: String] = [:]
     @Published private(set) var midiFXCapacity = 1
     @Published private(set) var audioFXCapacity = 2
+    @Published private(set) var masterFXCapacity = 4
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -329,6 +330,7 @@ final class RemoteControlStore: ObservableObject {
         componentNames = [:]
         midiFXCapacity = 1
         audioFXCapacity = 2
+        masterFXCapacity = 4
         parameters = []
         levels = []
         values = [:]
@@ -529,13 +531,23 @@ final class RemoteControlStore: ObservableObject {
             loadTimeoutTask?.cancel()
             return
         }
-        guard let modules = message["fx"] as? [String] else {
-            loadState = .error("Schwung did not return a valid Master FX listing.")
-            loadTimeoutTask?.cancel()
-            return
+        // Current Schwung sends a positional fx array and capacity. Older
+        // Manager builds may only send fx1...fx4, so accept both wire shapes.
+        let modules: [String]
+        if let positional = message["fx"] as? [String] {
+            modules = positional
+        } else {
+            let legacyKeys = ["fx1", "fx2", "fx3", "fx4"]
+            guard legacyKeys.contains(where: { message[$0] is String }) else {
+                loadState = .error("Schwung did not return a valid Master FX listing.")
+                loadTimeoutTask?.cancel()
+                return
+            }
+            modules = legacyKeys.map { message[$0] as? String ?? "" }
         }
+        masterFXCapacity = min(max(message["cap"] as? Int ?? 4, 1), 8)
         var names: [String: String] = [:]
-        for index in 0..<min(modules.count, 8) {
+        for index in 0..<min(modules.count, masterFXCapacity) {
             let module = modules[index].trimmingCharacters(in: .whitespacesAndNewlines)
             if !module.isEmpty { names["master_fx:fx\(index + 1)"] = module }
         }
