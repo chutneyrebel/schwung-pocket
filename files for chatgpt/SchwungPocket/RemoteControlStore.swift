@@ -637,7 +637,7 @@ final class RemoteControlStore: ObservableObject {
                 if let cap = message["midi_fx_cap"] as? Int {
                     midiFXCapacity = min(max(cap, 1), 8)
                 } else {
-                    midiFXCapacity = max(modules.count, 1)
+                    midiFXCapacity = min(max(modules.count, 1), 8)
                 }
             } else {
                 if let rawName = message["midi_fx1"] as? String {
@@ -661,7 +661,7 @@ final class RemoteControlStore: ObservableObject {
                 if let cap = message["fx_cap"] as? Int {
                     audioFXCapacity = min(max(cap, 1), 8)
                 } else {
-                    audioFXCapacity = max(modules.count, 2)
+                    audioFXCapacity = min(max(modules.count, 2), 8)
                 }
             } else {
                 for component in ["fx1", "fx2"] {
