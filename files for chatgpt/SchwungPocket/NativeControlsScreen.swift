@@ -60,7 +60,7 @@ struct NativeControlsScreen: View {
         }
         .onAppear {
             remote.loadSlotModules(address: device.addressText)
-            if remote.connection == .disconnected { remote.connect(address: device.addressText) }
+            if remote.connection == .disconnected { remote.connect(address: device.addressText) }\n            else { remote.refreshSlotMixStates() }
         }
         // Keep the remote subscription alive when switching between SchwungTroller and Mirror.
         // The scene-phase handler still manages background/foreground recovery.
