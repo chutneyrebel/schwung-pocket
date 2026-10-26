@@ -411,11 +411,14 @@ final class RemoteControlStore: ObservableObject {
                     guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                         throw URLError(.badServerResponse)
                     }
-                    let modules = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
+                    let catalogue = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
                     guard !Task.isCancelled else { return }
+                    // Schwung 1.7.3 serves the full catalogue at /api/modules.
+                    // Keep the picker focused on modules installed on the Move.
+                    let modules = catalogue.filter { $0.installed == true }
                     self?.availableSlotModules = modules
-                    self?.slotModulesError = modules.isEmpty ? "Schwung returned no installed modules for this device." : nil
-                    RemoteDiagnostics.log("slot module catalogue loaded from \(url.absoluteString): \(modules.count) modules")
+                    self?.slotModulesError = modules.isEmpty ? "Schwung returned no installed modules. Install a module in Schwung Manager first." : nil
+                    RemoteDiagnostics.log("slot module catalogue loaded from \(url.absoluteString): \(catalogue.count) catalogue entries, \(modules.count) installed")
                     return
                 } catch {
                     lastError = error
@@ -423,7 +426,7 @@ final class RemoteControlStore: ObservableObject {
                 }
             }
             guard !Task.isCancelled else { return }
-            self?.slotModulesError = "Could not load /api/slot-modules over HTTPS or HTTP. Check that Schwung is updated and that the Move address includes the correct port."
+            self?.slotModulesError = "Could not load /api/modules over HTTPS or HTTP. Check the Move address and port 7700."
             if let lastError { RemoteDiagnostics.log("slot module catalogue exhausted fallbacks: \(lastError.localizedDescription)") }
         }
     }
