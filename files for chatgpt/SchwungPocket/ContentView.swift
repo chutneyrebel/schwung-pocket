@@ -30,6 +30,7 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
 struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
     @State private var selectedTab: PocketTab = .home
+    @State private var selectedStudioModule: PocketStudioModule?
     @State private var navigationHidden = false
     @State private var navigationHideTask: Task<Void, Never>?
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,files,settings"
@@ -52,9 +53,32 @@ struct ContentView: View {
     private func content(for tab: PocketTab) -> some View {
         switch tab {
         case .home:
-            HomeScreen(device: device, openModules: { selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
+            HomeScreen(device: device, openModules: { selectedTab = .modules }, openStudioModule: { module in selectedStudioModule = module; selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
         case .modules:
-            ModuleHubScreen(device: device, showsCloseButton: false)
+            if let module = selectedStudioModule {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button {
+                            selectedStudioModule = nil
+                        } label: {
+                            Label("All modules", systemImage: "chevron.left")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        Spacer()
+                        Text(module.title.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Theme.background)
+                    module.destination(device: device)
+                }
+            } else {
+                ModuleHubScreen(device: device, showsCloseButton: false)
+            }
         case .mirror:
             EmptyView() // Mirror remains mounted in the parent ZStack.
         case .manager:
@@ -106,6 +130,7 @@ struct ContentView: View {
             ForEach(orderedTabs) { tab in
                 Button {
                     selectedTab = tab
+                    if tab == .modules { selectedStudioModule = nil }
                     revealNavigation()
                 } label: {
                     VStack(spacing: 4) {
@@ -213,6 +238,7 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
 private struct HomeScreen: View {
     @ObservedObject var device: MoveConnectionStore
     let openModules: () -> Void
+    let openStudioModule: (PocketStudioModule) -> Void
     let openManager: () -> Void
     let openMirror: () -> Void
     let openVault: () -> Void
@@ -220,7 +246,6 @@ private struct HomeScreen: View {
 
     @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "modules,nativeControls,sampleLab,grooveToolkit,manager,mirror,files,settings"
     @State private var showingFavouriteEditor = false
-    @State private var quickModule: PocketStudioModule?
 
     private var favouriteDestinations: [FavoriteDestination] {
         let selected = favouriteIDs.split(separator: ",").map(String.init)
@@ -247,12 +272,6 @@ private struct HomeScreen: View {
             .sheet(isPresented: $showingFavouriteEditor) {
                 FavouriteActionsEditor(favouriteIDs: $favouriteIDs)
                     .preferredColorScheme(.dark)
-            }
-            .sheet(item: $quickModule) { module in
-                NavigationStack {
-                    module.destination(device: device)
-                }
-                .preferredColorScheme(.dark)
             }
         }
     }
@@ -417,9 +436,9 @@ private struct HomeScreen: View {
     private func open(_ destination: FavoriteDestination) {
         switch destination {
         case .modules: openModules()
-        case .nativeControls: quickModule = .nativeControls
-        case .sampleLab: quickModule = .sampleLab
-        case .grooveToolkit: quickModule = .grooveToolkit
+        case .nativeControls: openStudioModule(.nativeControls)
+        case .sampleLab: openStudioModule(.sampleLab)
+        case .grooveToolkit: openStudioModule(.grooveToolkit)
         case .manager: openManager()
         case .mirror: openMirror()
         case .files: openVault()
@@ -1651,7 +1670,8 @@ private struct ConnectionSettingsScreen: View {
             // Migrate older saved orders without dropping the new Files destination.
             return [.home, .modules, .mirror, .manager, .files, .settings]
         }
-        return saved + PocketTab.allCases.filter { !saved.contains($0) }
+        let completed = saved + PocketTab.allCases.filter { !saved.contains($0) }
+        return completed.filter { $0 != .settings } + [.settings]
     }
 
     private var connectionStatusSymbol: String {
@@ -1875,9 +1895,9 @@ private struct ConnectionSettingsScreen: View {
                                     Text(tab.title).foregroundStyle(.white)
                                     Spacer()
                                     Button { moveTab(from: index, by: -1) } label: { Image(systemName: "chevron.up") }
-                                        .disabled(index == 0).opacity(index == 0 ? 0.3 : 1)
+                                        .disabled(index == 0 || tab == .settings).opacity(index == 0 || tab == .settings ? 0.3 : 1)
                                     Button { moveTab(from: index, by: 1) } label: { Image(systemName: "chevron.down") }
-                                        .disabled(index == orderedTabNames.count - 1).opacity(index == orderedTabNames.count - 1 ? 0.3 : 1)
+                                        .disabled(index == orderedTabNames.count - 1 || tab == .settings).opacity(index == orderedTabNames.count - 1 || tab == .settings ? 0.3 : 1)
                                 }
                                 .font(.system(size: 13, weight: .medium))
                                 .padding(.vertical, 4)
@@ -1972,7 +1992,7 @@ private struct ConnectionSettingsScreen: View {
     private func moveTab(from index: Int, by offset: Int) {
         var tabs = orderedTabNames
         let destination = index + offset
-        guard tabs.indices.contains(index), tabs.indices.contains(destination) else { return }
+        guard tabs.indices.contains(index), tabs.indices.contains(destination), tabs[index] != .settings else { return }
         let item = tabs.remove(at: index)
         tabs.insert(item, at: destination)
         storedTabOrder = tabs.map(\.rawValue).joined(separator: ",")
