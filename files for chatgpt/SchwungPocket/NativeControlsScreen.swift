@@ -39,6 +39,7 @@ struct NativeControlsScreen: View {
     @State private var copiedReport = false
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
+    @State private var showingClearConfirmation = false
 
     var body: some View {
         ModuleScreenShell(
@@ -77,6 +78,14 @@ struct NativeControlsScreen: View {
             } else {
                 ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
             }
+        }
+        .alert("Clear \(selectedChainComponent.title)?", isPresented: $showingClearConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear Module", role: .destructive) {
+                remote.clearSlotModule(component: selectedChainComponent.rawValue)
+            }
+        } message: {
+            Text("This unloads the module from the selected signal-chain position.")
         }
     }
 
@@ -185,6 +194,14 @@ struct NativeControlsScreen: View {
                     }
                     .buttonStyle(StudioSecondaryButton())
                     .disabled(!remote.isConnected)
+                    Button {
+                        showingClearConfirmation = true
+                    } label: {
+                        Label("Clear", systemImage: "xmark.circle")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected || remote.componentNames[selectedChainComponent.rawValue] == nil)
                 }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(chainComponents) { component in
