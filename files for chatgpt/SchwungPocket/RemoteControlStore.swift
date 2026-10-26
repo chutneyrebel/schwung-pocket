@@ -11,6 +11,11 @@ import SwiftUI
 ///
 /// NOT verified: an explicit unsubscribe message. None is sent. When the destination changes we
 /// send a new `subscribe` and ignore any message whose `slot` is not the current destination.
+struct RemoteSlotMixState {
+    var muted: Bool?
+    var soloed: Bool?
+}
+
 @MainActor
 final class RemoteControlStore: ObservableObject {
     enum ConnectionState: Equatable {
@@ -38,6 +43,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var audioFXCapacity = 2
     @Published private(set) var masterFXCapacity = 4
     @Published private(set) var customToolUIURL: String?
+    @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -223,8 +229,13 @@ final class RemoteControlStore: ObservableObject {
         do {
             switch wireTarget {
             case .slot(let slot):
-                try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": slot])))
-                guard generation == connectionGeneration else { return }
+                // Keep all four mixer tiles live while the selected slot owns
+                // the detailed parameter view. Schwung supports multiple slot
+                // subscriptions on one Remote UI WebSocket.
+                for subscribedSlot in 0...3 {
+                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
+                    guard generation == connectionGeneration else { return }
+                }
                 beginLoading()
             case .masterFX:
                 try await task.send(.string(Self.jsonString(["type": "subscribe_master_fx"])))
@@ -400,6 +411,29 @@ final class RemoteControlStore: ObservableObject {
 
     var slotMuted: Bool { values["slot:muted"] == "1" }
     var slotSoloed: Bool { values["slot:soloed"] == "1" }
+
+    func isSlotMuted(_ wireSlot: Int) -> Bool {
+        slotMixStates[wireSlot]?.muted ?? false
+    }
+
+    func isSlotSoloed(_ wireSlot: Int) -> Bool {
+        slotMixStates[wireSlot]?.soloed ?? false
+    }
+
+    private func updateSlotMixState(slot: Int, params: [String: Any]) {
+        guard (0...3).contains(slot) else { return }
+        var state = slotMixStates[slot] ?? RemoteSlotMixState()
+        for (key, value) in params {
+            let text: String?
+            if let string = value as? String { text = string }
+            else if let number = value as? NSNumber { text = number.stringValue }
+            else { text = nil }
+            guard let text else { continue }
+            if key == "slot:muted" { state.muted = text == "1" || text.lowercased() == "true" }
+            if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
+        }
+        slotMixStates[slot] = state
+    }
     var slotReceiveChannel: String { values["slot:receive_channel"] ?? "0" }
     var slotForwardChannel: String { values["slot:forward_channel"] ?? "-1" }
 
@@ -409,11 +443,29 @@ final class RemoteControlStore: ObservableObject {
     }
 
     func setSlotMuted(_ isMuted: Bool) {
-        setSlotSetting("slot:muted", value: isMuted ? "1" : "0")
+        guard case .slot(let slot) = wireTarget else { return }
+        setSlotMuted(isMuted, slot: slot)
     }
 
     func setSlotSoloed(_ isSoloed: Bool) {
-        setSlotSetting("slot:soloed", value: isSoloed ? "1" : "0")
+        guard case .slot(let slot) = wireTarget else { return }
+        setSlotSoloed(isSoloed, slot: slot)
+    }
+
+    func setSlotMuted(_ isMuted: Bool, slot: Int) {
+        guard isConnected, (0...3).contains(slot) else { return }
+        var state = slotMixStates[slot] ?? RemoteSlotMixState()
+        state.muted = isMuted
+        slotMixStates[slot] = state
+        setSlotSetting("slot:muted", value: isMuted ? "1" : "0", slot: slot)
+    }
+
+    func setSlotSoloed(_ isSoloed: Bool, slot: Int) {
+        guard isConnected, (0...3).contains(slot) else { return }
+        var state = slotMixStates[slot] ?? RemoteSlotMixState()
+        state.soloed = isSoloed
+        slotMixStates[slot] = state
+        setSlotSetting("slot:soloed", value: isSoloed ? "1" : "0", slot: slot)
     }
 
     func setSlotReceiveChannel(_ channel: String) {
@@ -428,8 +480,15 @@ final class RemoteControlStore: ObservableObject {
 
     private func setSlotSetting(_ key: String, value: String) {
         guard isConnected, case .slot(let slot) = wireTarget else { return }
-        values[key] = value
-        lastSent[key] = value
+        setSlotSetting(key, value: value, slot: slot)
+    }
+
+    private func setSlotSetting(_ key: String, value: String, slot: Int) {
+        guard isConnected, (0...3).contains(slot) else { return }
+        if case .slot(let selectedSlot) = wireTarget, selectedSlot == slot {
+            values[key] = value
+            lastSent[key] = value
+        }
         send(["type": "set_param", "slot": slot, "key": key, "value": value])
     }
 
@@ -503,6 +562,11 @@ final class RemoteControlStore: ObservableObject {
 
         switch wireTarget {
         case .slot(let currentSlot):
+            if type == "param_update",
+               let messageSlot = message["slot"] as? Int,
+               (0...3).contains(messageSlot) {
+                updateSlotMixState(slot: messageSlot, params: message["params"] as? [String: Any] ?? [:])
+            }
             guard let messageSlot = message["slot"] as? Int, messageSlot == currentSlot else {
                 RemoteDiagnostics.log("ignored \(type) not addressed to current slot")
                 return
@@ -572,11 +636,24 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func handleToolInfo(_ message: [String: Any]) {
-        instrumentName = (message["id"] as? String) ?? ""
-        if instrumentName.isEmpty { customToolUIURL = nil }
-        parameters = []
-        values = [:]
-        lastSent = [:]
+        let incomingID = (message["id"] as? String)
+            ?? (message["name"] as? String)
+            ?? (message["tool"] as? String)
+            ?? ""
+        let changed = incomingID != instrumentName
+        instrumentName = incomingID
+        if instrumentName.isEmpty {
+            customToolUIURL = nil
+            parameters = []
+            values = [:]
+            lastSent = [:]
+        } else if changed {
+            // Clear stale values only when a different Tool arrives. Repeated
+            // tool_info announcements must not erase state already received.
+            parameters = []
+            values = [:]
+            lastSent = [:]
+        }
 
         // tool_info confirms that the Tool protocol responded. Its live state
         // arrives separately via param_update, and some Tools expose no flat
