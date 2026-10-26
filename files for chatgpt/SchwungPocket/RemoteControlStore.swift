@@ -524,7 +524,7 @@ final class RemoteControlStore: ObservableObject {
                                 id: module.id,
                                 name: module.name,
                                 component_type: module.component_type,
-                                device_only: module.device_only ?? installedMatch?.device_only,
+                                device_only: module.device_only ?? installedMatch?.device_only ?? false,
                                 dsp_path: path,
                                 installed: module.installed ?? (installedMatch != nil),
                                 installed_version: module.installed_version
