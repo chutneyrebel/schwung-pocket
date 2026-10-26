@@ -1931,7 +1931,7 @@ private struct ConnectionSettingsScreen: View {
                                     .font(.system(size: 11)).foregroundStyle(Theme.muted)
                                 ForEach(PocketTab.allCases) { tab in
                                     Toggle(tab.title, isOn: Binding(
-                                        get: { navigationAutoHideTabs.split(separator: ",").contains(Substring(tab.rawValue)) },
+                                        get: { Set(navigationAutoHideTabs.split(separator: ",").map(String.init)).contains(tab.rawValue) },
                                         set: { enabled in
                                             var selected = Set(navigationAutoHideTabs.split(separator: ",").map(String.init))
                                             if enabled { selected.insert(tab.rawValue) }
