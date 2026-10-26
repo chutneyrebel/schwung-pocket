@@ -233,7 +233,7 @@ struct NativeControlsScreen: View {
         guard target.host == nil || target.host?.caseInsensitiveCompare(host) == .orderedSame else { return nil }
         target.scheme = scheme
         target.host = host
-        if target.port == nil { target.port = baseComponents.port }
+        target.port = baseComponents.port
         var items = target.queryItems ?? []
         items.removeAll { ["schwungStandalone", "tool", "component"].contains($0.name) }
         items.append(URLQueryItem(name: "schwungStandalone", value: "1"))
