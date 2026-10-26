@@ -44,6 +44,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var masterFXCapacity = 4
     @Published private(set) var customToolUIURL: String?
     @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
+    @Published private(set) var slotInstrumentNames: [Int: String] = [:]
     @Published private(set) var availableSlotModules: [RemoteSlotModule] = []
     @Published private(set) var isLoadingSlotModules = false
     @Published private(set) var slotModulesError: String?
@@ -719,6 +720,17 @@ final class RemoteControlStore: ObservableObject {
             customToolUIURL = url.isEmpty ? nil : url
             RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
             return
+        }
+        // Cache each slot's instrument label whenever Schwung reports slot_info,
+        // even when that slot is not the currently selected destination.
+        if type == "slot_info",
+           let slot = message["slot"] as? Int,
+           (0...3).contains(slot) {
+            let unknown = Set(message["unknown"] as? [String] ?? [])
+            if !unknown.contains("synth"), let name = message["synth"] as? String {
+                let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                slotInstrumentNames[slot] = cleaned.isEmpty ? nil : cleaned
+            }
         }
         if type == "param_update",
            let slot = message["slot"] as? Int,
