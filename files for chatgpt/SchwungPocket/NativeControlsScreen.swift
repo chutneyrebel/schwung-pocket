@@ -266,30 +266,42 @@ struct NativeControlsScreen: View {
 
     private var resolvedToolCustomUIURL: URL? {
         guard isTool, let raw = remote.customToolUIURL, !raw.isEmpty else { return nil }
+        return resolveCustomUIURL(raw, component: "tool", mode: "tool")
+    }
+
+    private var resolvedSelectedMasterFXCustomUIURL: URL? {
+        guard isMasterFX,
+              let raw = remote.customComponentUIURLs[remote.selectedMasterFXComponent],
+              !raw.isEmpty else { return nil }
+        return resolveCustomUIURL(raw, component: remote.selectedMasterFXComponent, mode: "master_fx")
+    }
+
+    /// Resolve a Manager-provided panel on the Move's own host. Protocol URLs
+    /// may be relative paths, but must never redirect the initial load to an
+    /// unrelated host supplied by module metadata.
+    private func resolveCustomUIURL(_ raw: String, component: String, mode: String) -> URL? {
         let address = device.addressText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !address.isEmpty else { return nil }
         let baseText = address.contains("://") ? address : "https://" + address
         guard let baseURL = URL(string: baseText),
               let baseComponents = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
               let scheme = baseComponents.scheme,
-              let host = baseComponents.host else { return nil }
-        guard let rawURL = URL(string: raw),
+              let host = baseComponents.host,
+              let rawURL = URL(string: raw),
               var target = URLComponents(url: rawURL, resolvingAgainstBaseURL: false) else { return nil }
         if target.scheme == nil {
             target = URLComponents(url: URL(string: raw, relativeTo: baseURL)?.absoluteURL ?? baseURL,
                                    resolvingAgainstBaseURL: false) ?? target
         }
-        // Custom panels are served by the Move's Schwung Manager. Do not load
-        // an arbitrary external host from a protocol message.
         guard target.host == nil || target.host?.caseInsensitiveCompare(host) == .orderedSame else { return nil }
         target.scheme = scheme
         target.host = host
         target.port = baseComponents.port
         var items = target.queryItems ?? []
-        items.removeAll { ["schwungStandalone", "tool", "component"].contains($0.name) }
+        items.removeAll { ["schwungStandalone", "tool", "master_fx", "component"].contains($0.name) }
         items.append(URLQueryItem(name: "schwungStandalone", value: "1"))
-        items.append(URLQueryItem(name: "tool", value: "1"))
-        items.append(URLQueryItem(name: "component", value: "tool"))
+        items.append(URLQueryItem(name: mode, value: "1"))
+        items.append(URLQueryItem(name: "component", value: component))
         target.queryItems = items
         return target.url
     }
@@ -567,13 +579,16 @@ struct NativeControlsScreen: View {
         case .loaded:
             if isTool { toolInfoCard }
             if let customURL = resolvedToolCustomUIURL { toolCustomUICard(customURL) }
+            if let customURL = resolvedSelectedMasterFXCustomUIURL { masterFXCustomUICard(customURL) }
             if selectedComponentParameters.isEmpty {
                 if isMasterFX {
-                    let moduleName = remote.componentNames[remote.selectedMasterFXComponent]
-                    let emptyText = moduleName == nil
-                        ? "This Master FX position is empty. Load an effect on Move, then tap Reload."
-                        : "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata for it."
-                    messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
+                    if resolvedSelectedMasterFXCustomUIURL == nil {
+                        let moduleName = remote.componentNames[remote.selectedMasterFXComponent]
+                        let emptyText = moduleName == nil
+                            ? "This Master FX position is empty. Load an effect on Move, then tap Reload."
+                            : "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata or custom panel for it."
+                        messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
+                    }
                 } else if isTool {
                     // When a valid custom panel is already rendered above, avoid a
                     // second empty-state card that misleadingly suggests the Tool
@@ -601,12 +616,20 @@ struct NativeControlsScreen: View {
     }
 
     private func toolCustomUICard(_ url: URL) -> some View {
+        customUICard(url, title: "TOOL CUSTOM PANEL")
+    }
+
+    private func masterFXCustomUICard(_ url: URL) -> some View {
+        customUICard(url, title: "MASTER FX CUSTOM PANEL")
+    }
+
+    private func customUICard(_ url: URL, title: String) -> some View {
         PocketCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "macwindow")
                         .foregroundStyle(Theme.accent)
-                    Text("TOOL CUSTOM PANEL")
+                    Text(title)
                         .font(.system(size: 10, weight: .heavy))
                         .tracking(1.3)
                         .foregroundStyle(Theme.muted)
