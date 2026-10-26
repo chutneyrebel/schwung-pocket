@@ -53,6 +53,8 @@ struct ContentView: View {
             HomeScreen(device: device, openModules: { selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
         case .modules:
             ModuleHubScreen(device: device, showsCloseButton: false)
+        case .mirror:
+            EmptyView() // Mirror remains mounted in the parent ZStack.
         case .manager:
             ManagerScreen(device: device)
         case .files:
