@@ -246,10 +246,14 @@ struct NativeControlsScreen: View {
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE")
+                        Text(!remote.hasComponentBypassState(selectedChainComponent.rawValue)
+                             ? "MODULE STATUS UNKNOWN"
+                             : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE"))
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
-                            .foregroundStyle(remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success)
+                            .foregroundStyle(!remote.hasComponentBypassState(selectedChainComponent.rawValue)
+                                             ? Theme.muted
+                                             : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success))
                         Text(remote.componentNames[selectedChainComponent.rawValue] ?? "No module in this position")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.muted)
@@ -355,13 +359,47 @@ struct NativeControlsScreen: View {
 
     private func formattedToolStateValue(_ raw: String) -> String {
         guard let data = raw.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
-              JSONSerialization.isValidJSONObject(object),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+            return raw
+        }
+        if let state = object as? [String: Any] {
+            var parts: [String] = []
+            if let op = state["op"] as? String { parts.append("op: \(op)") }
+            if let owner = state["owner"] { parts.append("owner: \(owner)") }
+            if let rawNotes = state["notes"] as? [NSNumber] {
+                let notes = rawNotes.map { number -> String in
+                    let note = number.intValue
+                    return "\(note) (\(midiNoteName(note)))"
+                }
+                parts.append("notes: \(notes.joined(separator: ", "))")
+            }
+            for key in ["velocity", "route", "channel", "cc", "controller", "midi_cc"] {
+                guard let value = state[key] else { continue }
+                if key == "channel", let number = value as? NSNumber, (0...15).contains(number.intValue) {
+                    parts.append("MIDI channel: \(number.intValue + 1)")
+                } else if ["cc", "controller", "midi_cc"].contains(key) {
+                    parts.append("CC \(value)")
+                } else {
+                    parts.append("\(key.replacingOccurrences(of: "_", with: " ")): \(value)")
+                }
+            }
+            for key in state.keys.sorted() where !["op", "owner", "notes", "velocity", "route", "channel", "cc", "controller", "midi_cc"].contains(key) {
+                if let value = state[key] { parts.append("\(key): \(value)") }
+            }
+            if !parts.isEmpty { return parts.joined(separator: "  ·  ") }
+        }
+        guard JSONSerialization.isValidJSONObject(object),
               let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
               let text = String(data: pretty, encoding: .utf8) else {
             return raw
         }
         return text
+    }
+
+    private func midiNoteName(_ note: Int) -> String {
+        let names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]
+        guard (0...127).contains(note) else { return "note \(note)" }
+        return "\(names[note % 12])\((note / 12) - 1)"
     }
 
     private var toolInfoCard: some View {
@@ -478,10 +516,14 @@ struct NativeControlsScreen: View {
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "EFFECT BYPASSED" : "EFFECT ACTIVE")
+                        Text(!remote.hasComponentBypassState(remote.selectedMasterFXComponent)
+                             ? "EFFECT STATUS UNKNOWN"
+                             : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "EFFECT BYPASSED" : "EFFECT ACTIVE"))
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
-                            .foregroundStyle(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success)
+                            .foregroundStyle(!remote.hasComponentBypassState(remote.selectedMasterFXComponent)
+                                             ? Theme.muted
+                                             : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success))
                         Text(remote.componentNames[remote.selectedMasterFXComponent] ?? "No effect in this position")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.muted)
