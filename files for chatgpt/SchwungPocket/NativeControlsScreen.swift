@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WebKit
 
 private struct SchwungChainComponent: Identifiable, Hashable {
     let rawValue: String
@@ -213,6 +214,35 @@ struct NativeControlsScreen: View {
         }
     }
 
+    private var resolvedToolCustomUIURL: URL? {
+        guard isTool, let raw = remote.customToolUIURL, !raw.isEmpty else { return nil }
+        let address = device.addressText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !address.isEmpty else { return nil }
+        let baseText = address.contains("://") ? address : "https://" + address
+        guard let baseURL = URL(string: baseText),
+              let baseComponents = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
+              let scheme = baseComponents.scheme,
+              let host = baseComponents.host else { return nil }
+        guard var target = URLComponents(string: raw, resolvingAgainstBaseURL: false) else { return nil }
+        if target.scheme == nil {
+            target = URLComponents(url: URL(string: raw, relativeTo: baseURL)?.absoluteURL ?? baseURL,
+                                   resolvingAgainstBaseURL: false) ?? target
+        }
+        // Custom panels are served by the Move's Schwung Manager. Do not load
+        // an arbitrary external host from a protocol message.
+        guard target.host == nil || target.host?.caseInsensitiveCompare(host) == .orderedSame else { return nil }
+        target.scheme = scheme
+        target.host = host
+        if target.port == nil { target.port = baseComponents.port }
+        var items = target.queryItems ?? []
+        items.removeAll { ["schwungStandalone", "tool", "component"].contains($0.name) }
+        items.append(URLQueryItem(name: "schwungStandalone", value: "1"))
+        items.append(URLQueryItem(name: "tool", value: "1"))
+        items.append(URLQueryItem(name: "component", value: "tool"))
+        target.queryItems = items
+        return target.url
+    }
+
     private var selectedComponentParameters: [RemoteParameter] {
         if isMasterFX {
             return remote.parameters
@@ -421,6 +451,7 @@ struct NativeControlsScreen: View {
             messageCard(icon: "waveform.path.ecg", title: "Ready to discover controls",
                         text: remote.isConnected ? "Pick a destination above." : "Connect to Schwung to load the selected destination.")
         case .loaded:
+            if let customURL = resolvedToolCustomUIURL { toolCustomUICard(customURL) }
             if selectedComponentParameters.isEmpty {
                 if isMasterFX {
                     let moduleName = remote.componentNames[remote.selectedMasterFXComponent]
@@ -431,7 +462,9 @@ struct NativeControlsScreen: View {
                 } else if isTool {
                     let emptyText = remote.instrumentName.isEmpty
                         ? "No overtake Tool is currently loaded. Load a Tool in Schwung on Move, then tap Reload."
-                        : "Tool \(remote.instrumentName) has not reported flat state values. If it has a custom web UI, this native view cannot render that HTML panel yet."
+                        : (remote.customToolUIURL == nil
+                            ? "Tool \(remote.instrumentName) has not reported flat state values and does not advertise a custom web UI."
+                            : "Tool \(remote.instrumentName) has no native state values. Its custom web panel is shown above if the URL is supported.")
                     messageCard(icon: "wrench.and.screwdriver", title: "No native Tool controls", text: emptyText)
                 } else {
                     let loadedName = remote.componentNames[selectedChainComponent.rawValue]
@@ -442,6 +475,28 @@ struct NativeControlsScreen: View {
                 }
             } else {
                 parameterBank(selectedComponentParameters)
+            }
+        }
+    }
+
+    private func toolCustomUICard(_ url: URL) -> some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "macwindow")
+                        .foregroundStyle(Theme.accent)
+                    Text("TOOL CUSTOM PANEL")
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.3)
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Text("LIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(Theme.success)
+                }
+                ToolCustomWebView(url: url)
+                    .frame(minHeight: 260, idealHeight: 420, maxHeight: 620)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
@@ -587,5 +642,28 @@ private struct ParameterRow: View {
             }
             .pickerStyle(.menu).tint(Theme.accent)
         }
+    }
+}
+
+/// Hosts a module's own Schwung Remote UI. In standalone mode the module's
+/// bundled schwung-remote-api.js opens its own WebSocket and subscribes to the
+/// active Tool, so no guessed native parameter schema is needed.
+private struct ToolCustomWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.isOpaque = false
+        view.backgroundColor = UIColor.clear
+        view.scrollView.backgroundColor = UIColor.clear
+        view.scrollView.isScrollEnabled = true
+        view.load(URLRequest(url: url))
+        return view
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        guard uiView.url != url else { return }
+        uiView.load(URLRequest(url: url))
     }
 }
