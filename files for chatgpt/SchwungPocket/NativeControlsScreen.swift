@@ -215,6 +215,9 @@ struct NativeControlsScreen: View {
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
+                                        .frame(width: 6, height: 6)
                                     Image(systemName: component.symbol)
                                         .font(.system(size: 13, weight: .semibold))
                                     Text(component.title)
@@ -246,14 +249,10 @@ struct NativeControlsScreen: View {
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(!remote.hasComponentBypassState(selectedChainComponent.rawValue)
-                             ? "MODULE STATUS UNKNOWN"
-                             : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE"))
+                        Text(remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE")
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
-                            .foregroundStyle(!remote.hasComponentBypassState(selectedChainComponent.rawValue)
-                                             ? Theme.muted
-                                             : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success))
+                            .foregroundStyle(remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success)
                         Text(remote.componentNames[selectedChainComponent.rawValue] ?? "No module in this position")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.muted)
@@ -267,9 +266,7 @@ struct NativeControlsScreen: View {
                         )
                     } label: {
                         Label(
-                            !remote.hasComponentBypassState(selectedChainComponent.rawValue)
-                                ? "Bypass"
-                                : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Disable"),
+                            remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Bypass",
                             systemImage: remote.isComponentBypassed(selectedChainComponent.rawValue) ? "play.fill" : "pause.fill"
                         )
                         .font(.system(size: 11, weight: .bold))
@@ -494,8 +491,13 @@ struct NativeControlsScreen: View {
                             remote.selectedMasterFXComponent = key
                         } label: {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text("Master FX \(index)")
-                                    .font(.system(size: 12, weight: .bold))
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(key) ? Theme.warning : Theme.success))
+                                        .frame(width: 6, height: 6)
+                                    Text("Master FX \(index)")
+                                        .font(.system(size: 12, weight: .bold))
+                                }
                                 Text(moduleName ?? "Empty slot")
                                     .font(.system(size: 10, weight: .medium))
                                     .lineLimit(1)
@@ -518,14 +520,10 @@ struct NativeControlsScreen: View {
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(!remote.hasComponentBypassState(remote.selectedMasterFXComponent)
-                             ? "EFFECT STATUS UNKNOWN"
-                             : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "EFFECT BYPASSED" : "EFFECT ACTIVE"))
+                        Text(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "MODULE BYPASSED" : "MODULE ACTIVE")
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
-                            .foregroundStyle(!remote.hasComponentBypassState(remote.selectedMasterFXComponent)
-                                             ? Theme.muted
-                                             : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success))
+                            .foregroundStyle(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success)
                         Text(remote.componentNames[remote.selectedMasterFXComponent] ?? "No effect in this position")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.muted)
@@ -539,9 +537,7 @@ struct NativeControlsScreen: View {
                         )
                     } label: {
                         Label(
-                            !remote.hasComponentBypassState(remote.selectedMasterFXComponent)
-                                ? "Bypass"
-                                : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "Enable" : "Disable"),
+                            remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "Enable" : "Bypass",
                             systemImage: remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "play.fill" : "pause.fill"
                         )
                         .font(.system(size: 11, weight: .bold))
