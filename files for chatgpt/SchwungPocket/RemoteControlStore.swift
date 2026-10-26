@@ -821,6 +821,20 @@ final class RemoteControlStore: ObservableObject {
             let module = modules[index].trimmingCharacters(in: .whitespacesAndNewlines)
             if !module.isEmpty { names["master_fx:fx\(index + 1)"] = module }
         }
+        // A Master FX position can be changed directly on the Move while this
+        // screen remains open. Drop parameter metadata and cached values for any
+        // position whose module changed or was removed; otherwise controls from
+        // the previous effect can briefly remain visible or be written to it.
+        let previousNames = componentNames
+        let changedComponents = Set(previousNames.keys).union(names.keys).filter {
+            previousNames[$0] != names[$0]
+        }
+        for component in changedComponents {
+            parameters.removeAll { $0.component == component }
+            values = values.filter { !$0.key.hasPrefix(component + ":") }
+            lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        }
+
         componentNames = names
         if !names.keys.contains(selectedMasterFXComponent) {
             selectedMasterFXComponent = names.keys.sorted().first ?? "master_fx:fx1"
