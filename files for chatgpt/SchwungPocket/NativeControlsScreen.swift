@@ -244,6 +244,33 @@ struct NativeControlsScreen: View {
                         .accessibilityLabel("\(component.title), \(moduleName ?? "not loaded")")
                     }
                 }
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1)
+                            .foregroundStyle(remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success)
+                        Text(remote.componentNames[selectedChainComponent.rawValue] ?? "No module in this position")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Button {
+                        remote.setComponentBypassed(
+                            selectedChainComponent.rawValue,
+                            bypassed: !remote.isComponentBypassed(selectedChainComponent.rawValue)
+                        )
+                    } label: {
+                        Label(
+                            remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Disable",
+                            systemImage: remote.isComponentBypassed(selectedChainComponent.rawValue) ? "play.fill" : "pause.fill"
+                        )
+                        .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected || remote.componentNames[selectedChainComponent.rawValue] == nil)
+                }
                 Group {
                     if selectedChainComponent == .instrument && remote.levels.count > 1 {
                         Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
@@ -313,7 +340,10 @@ struct NativeControlsScreen: View {
                 .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
         }
         if isTool {
-            return remote.parameters.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+            // Tool state arrives as untyped values, not editable parameter
+            // metadata. Keep it in the live state readout instead of rendering
+            // every state field as a disabled control with a warning.
+            return []
         }
         if selectedChainComponent == .instrument {
             return remote.visibleParameters.filter { $0.component == selectedChainComponent.rawValue }
@@ -321,6 +351,17 @@ struct NativeControlsScreen: View {
         return remote.parameters
             .filter { $0.component == selectedChainComponent.rawValue }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private func formattedToolStateValue(_ raw: String) -> String {
+        guard let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+              JSONSerialization.isValidJSONObject(object),
+              let pretty = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: pretty, encoding: .utf8) else {
+            return raw
+        }
+        return text
     }
 
     private var toolInfoCard: some View {
@@ -351,19 +392,25 @@ struct NativeControlsScreen: View {
                         .foregroundStyle(Theme.muted)
                         .textSelection(.enabled)
                 }
-                if !remote.values.isEmpty {
-                    ForEach(remote.values.keys.filter { $0.hasPrefix("overtake_dsp:") }.sorted(), id: \.self) { key in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(String(key.dropFirst("overtake_dsp:".count)).replacingOccurrences(of: "_", with: " "))
-                                .font(.system(size: 11, weight: .medium))
+                let toolStateKeys = remote.values.keys.filter { $0.hasPrefix("overtake_dsp:") }.sorted()
+                if !toolStateKeys.isEmpty {
+                    Text("LIVE TOOL STATE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.muted)
+                    ForEach(toolStateKeys, id: \.self) { key in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(String(key.dropFirst("overtake_dsp:".count)).replacingOccurrences(of: "_", with: " ").uppercased())
+                                .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(Theme.muted)
-                            Spacer(minLength: 8)
-                            Text(remote.values[key] ?? "")
-                                .font(.system(size: 10, design: .monospaced))
+                            Text(formattedToolStateValue(remote.values[key] ?? ""))
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundStyle(.white)
-                                .lineLimit(3)
                                 .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .padding(9)
+                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
                 } else {
                     Text("No flat Tool state values have arrived yet.")
@@ -428,6 +475,33 @@ struct NativeControlsScreen: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "EFFECT BYPASSED" : "EFFECT ACTIVE")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1)
+                            .foregroundStyle(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success)
+                        Text(remote.componentNames[remote.selectedMasterFXComponent] ?? "No effect in this position")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Button {
+                        remote.setComponentBypassed(
+                            remote.selectedMasterFXComponent,
+                            bypassed: !remote.isComponentBypassed(remote.selectedMasterFXComponent)
+                        )
+                    } label: {
+                        Label(
+                            remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "Enable" : "Disable",
+                            systemImage: remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "play.fill" : "pause.fill"
+                        )
+                        .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected || remote.componentNames[remote.selectedMasterFXComponent] == nil)
                 }
             }
         }
@@ -596,16 +670,16 @@ struct NativeControlsScreen: View {
                         messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
                     }
                 } else if isTool {
-                    // When a valid custom panel is already rendered above, avoid a
-                    // second empty-state card that misleadingly suggests the Tool
-                    // has no usable controls. Keep the fallback when no panel can
-                    // be loaded, so the user still gets a useful explanation.
-                    if resolvedToolCustomUIURL == nil {
+                    // Tool state is shown as read-only live data in toolInfoCard.
+                    // Only show this fallback when neither a custom panel nor
+                    // state values are available.
+                    let hasToolState = remote.values.keys.contains { $0.hasPrefix("overtake_dsp:") }
+                    if resolvedToolCustomUIURL == nil && !hasToolState {
                         let emptyText = remote.instrumentName.isEmpty
                             ? "No overtake Tool is currently loaded. Load a Tool in Schwung on Move, then tap Reload."
                             : (remote.customToolUIURL == nil
-                                ? "Tool \(remote.instrumentName) has not reported flat state values and does not advertise a custom web UI."
-                                : "Tool \(remote.instrumentName) has no native state values, and its advertised custom panel could not be opened.")
+                                ? "Tool \(remote.instrumentName) has not reported state values and does not advertise a custom web UI."
+                                : "Tool \(remote.instrumentName) has no state values, and its advertised custom panel could not be opened.")
                         messageCard(icon: "wrench.and.screwdriver", title: "No native Tool controls", text: emptyText)
                     }
                 } else {
