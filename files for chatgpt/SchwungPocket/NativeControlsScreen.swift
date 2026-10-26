@@ -167,11 +167,9 @@ struct NativeControlsScreen: View {
                             .foregroundStyle(selected ? Theme.background : Color.white)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                             .padding(.horizontal, 10)
-                            .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                            .overlay {
+                            .background {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.accent.opacity(selected ? 1 : 0))
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .fill(selected ? Theme.accent : Theme.surfaceRaised)
                             }
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
