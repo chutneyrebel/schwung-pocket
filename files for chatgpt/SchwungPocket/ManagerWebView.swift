@@ -139,8 +139,45 @@ struct ManagerWebView: UIViewRepresentable {
               log.style.setProperty('width', '320px', 'important');
               log.style.setProperty('height', '320px', 'important');
               log.style.setProperty('overflow', 'hidden', 'important');
+
               let lastEvent = '';
-              const publishLatest = () => {
+              let lastCount = null;
+              let rawSurfaceAvailable = false;
+              const post = event => window.webkit.messageHandlers.schwungMIDIEvent.postMessage(event);
+
+              // Read the same shared-memory event ring used by Schwung's visible Log.
+              // This preserves the actual CC number/value and note/velocity where available.
+              const pollSurfaceEvents = () => {
+                try {
+                  if (typeof surfView === 'undefined' || typeof OFF === 'undefined' ||
+                      typeof surf === 'undefined' || typeof N_EVENTS === 'undefined') return;
+                  rawSurfaceAvailable = true;
+                  const count = surfView.getUint32(OFF.evCount, true);
+                  if (lastCount === null) { lastCount = count; return; }
+                  if (count === lastCount) return;
+                  if (count < lastCount) { lastCount = count; return; } // counter wrapped
+                  const first = Math.max(lastCount, count - N_EVENTS);
+                  for (let eventIndex = first; eventIndex < count; eventIndex++) {
+                    const offset = OFF.events + (eventIndex % N_EVENTS) * 8;
+                    const status = surf[offset + 4], data1 = surf[offset + 5], data2 = surf[offset + 6];
+                    const type = status & 0xF0;
+                    if (type === 0x90 || type === 0x80) {
+                      const noteOn = type === 0x90 && data2 > 0;
+                      const label = typeof noteName === 'function' ? noteName(data1) : ('Note ' + data1);
+                      post({ kind: 'note', label, action: noteOn ? ('↓ velocity ' + data2) : '↑ note off', note: data1, velocity: data2, pressed: noteOn });
+                    } else if (type === 0xB0) {
+                      const label = (typeof CC_NAMES !== 'undefined' && CC_NAMES[data1]) ? CC_NAMES[data1] : ('CC ' + data1);
+                      post({ kind: 'cc', label, action: 'value ' + data2, controller: data1, value: data2 });
+                    }
+                  }
+                  lastCount = count;
+                } catch (_) {
+                  // Older Schwung pages may not expose the event ring to injected scripts.
+                }
+              };
+
+              const publishLatestLogRow = () => {
+                if (rawSurfaceAvailable) return;
                 const row = log.querySelector('.row');
                 if (!row) return;
                 const cells = [...row.querySelectorAll('span')];
@@ -152,11 +189,13 @@ struct ManagerWebView: UIViewRepresentable {
                 const key = label + '|' + action;
                 if (key === lastEvent) return;
                 lastEvent = key;
-                window.webkit.messageHandlers.schwungMIDIEvent.postMessage({ label, action, age });
+                post({ kind: 'log', label, action, age });
               };
-              new MutationObserver(publishLatest).observe(log, { childList: true, subtree: true, characterData: true });
+              new MutationObserver(publishLatestLogRow).observe(log, { childList: true, subtree: true, characterData: true });
               window.__spMIDIEventBridgeInstalled = true;
-              publishLatest();
+              pollSurfaceEvents();
+              window.__spMIDIEventPoll = setInterval(pollSurfaceEvents, 80);
+              publishLatestLogRow();
             })();
             """#
             webView.evaluateJavaScript(script, completionHandler: nil)
