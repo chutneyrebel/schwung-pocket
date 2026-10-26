@@ -1,6 +1,11 @@
 import SwiftUI
 import UIKit
 import WebKit
+import Combine
+
+extension Notification.Name {
+    static let schwungMirrorMIDIEvent = Notification.Name("SchwungPocket.MirrorMIDIEvent")
+}
 
 struct ManagerWebView: UIViewRepresentable {
     let url: URL
@@ -43,6 +48,7 @@ struct ManagerWebView: UIViewRepresentable {
             forMainFrameOnly: false
         )
         configuration.userContentController.addUserScript(audioContextObserver)
+        configuration.userContentController.add(context.coordinator, name: "schwungMIDIEvent")
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.backgroundColor = UIColor(red: 0.055, green: 0.067, blue: 0.09, alpha: 1.0)
         webView.isOpaque = false
@@ -89,7 +95,7 @@ struct ManagerWebView: UIViewRepresentable {
         webView.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 12))
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, WKScriptMessageHandler {
         var mirrorDisplayMode: String?
         var fitMirrorViewport = false
         var onRecordControlResult: ((String) -> Void)?
@@ -99,8 +105,14 @@ struct ManagerWebView: UIViewRepresentable {
         var pendingRecordTrigger: UUID?
         var lastRecordTrigger: UUID?
 
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "schwungMIDIEvent", let event = message.body as? [String: Any] else { return }
+            NotificationCenter.default.post(name: .schwungMirrorMIDIEvent, object: nil, userInfo: event)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             if mirrorDisplayMode != nil || fitMirrorViewport { applyMirrorOptions(to: webView) }
+            if webView.url?.path == "/mirror" { installMIDIEventBridge(to: webView) }
             if pendingAudioTrigger != nil {
                 pendingAudioTrigger = nil
                 enablePortalAudio(in: webView)
@@ -109,6 +121,45 @@ struct ManagerWebView: UIViewRepresentable {
                 pendingRecordTrigger = nil
                 triggerPortalRecording(in: webView)
             }
+        }
+
+        func installMIDIEventBridge(to webView: WKWebView) {
+            let script = #"""
+            (() => {
+              if (window.__spMIDIEventBridgeInstalled) return;
+              const button = document.getElementById('logbtn');
+              const log = document.getElementById('log');
+              if (!button || !log) return;
+              if (!button.classList.contains('on')) button.click();
+              // Keep Schwung's own log renderer running, but move its panel off-screen
+              // so it does not cover the mirrored Move display.
+              log.style.setProperty('position', 'fixed', 'important');
+              log.style.setProperty('left', '-10000px', 'important');
+              log.style.setProperty('top', '0', 'important');
+              log.style.setProperty('width', '320px', 'important');
+              log.style.setProperty('height', '320px', 'important');
+              log.style.setProperty('overflow', 'hidden', 'important');
+              let lastEvent = '';
+              const publishLatest = () => {
+                const row = log.querySelector('.row');
+                if (!row) return;
+                const cells = [...row.querySelectorAll('span')];
+                if (cells.length < 2) return;
+                const label = (cells[0].textContent || '').trim();
+                const action = (cells[1].textContent || '').trim();
+                const age = (cells[2]?.textContent || '').trim();
+                if (!label || !action) return;
+                const key = label + '|' + action;
+                if (key === lastEvent) return;
+                lastEvent = key;
+                window.webkit.messageHandlers.schwungMIDIEvent.postMessage({ label, action, age });
+              };
+              new MutationObserver(publishLatest).observe(log, { childList: true, subtree: true, characterData: true });
+              window.__spMIDIEventBridgeInstalled = true;
+              publishLatest();
+            })();
+            """#
+            webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
         func applyMirrorOptions(to webView: WKWebView) {
