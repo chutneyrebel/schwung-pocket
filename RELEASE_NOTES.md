@@ -41,7 +41,7 @@
 - Added an embedded WebKit panel for a supported Tool custom UI URL.
 - The resolver attempts to keep the embedded UI on the same Move host and port, uses the Move connection's base scheme, and adds standalone Tool query parameters.
 - Added empty-state messaging for Tools that expose neither flat parameter values nor a custom web UI.
-- **Status:** implemented in source; latest fix changed URLComponents construction for current Xcode SDK. A successful post-fix build and physical Move test must be confirmed before calling this verified.
+- **Status:** build-verified on commit `365bb7faa48c1e6df532f154e4f743f785c86ef2` (GitHub Actions run `40318579760` passed syntax validation, iOS build and artifact packaging). Physical Move verification of the custom UI is still pending.
 
 ## Earlier improvements
 
@@ -124,7 +124,7 @@
 - Limited FX capacity parsing to a supported maximum of eight positions.
 - Corrected Master FX UI to show only positions reported by the device.
 - Fixed Swift SDK compatibility for parsing the Tool custom UI URL by using `URL(string:)` followed by `URLComponents(url:resolvingAgainstBaseURL:)`.
-- Earlier build/package workflow was verified on commit `d7bae336fa5b451e25f08a2d9e1f23818338b47f`. The subsequent Tool custom UI URL fix needs a fresh successful workflow result before it is considered build-verified.
+- Latest full build/package verification: commit `365bb7faa48c1e6df532f154e4f743f785c86ef2`, GitHub Actions run `40318579760` passed and uploaded the unsigned IPA, build log and cumulative release notes. This confirms compilation and packaging only, not physical Move behaviour.
 
 ## Regression checklist for every build
 
