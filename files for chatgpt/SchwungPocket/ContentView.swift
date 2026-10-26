@@ -1410,7 +1410,7 @@ private struct MirrorScreen: View {
                     HStack(spacing: 0) {
                         Menu {
                             ForEach(MirrorDisplayMode.allCases.filter { !$0.rawValue.hasPrefix("slot") }) { mode in
-                                Button { savedMirrorDisplayMode = mode.rawValue } label: {
+                                Button { savedMirrorDisplayMode = mode.rawValue; revealNavigation() } label: {
                                     if mirrorDisplayMode == mode { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
                                 }
                             }
