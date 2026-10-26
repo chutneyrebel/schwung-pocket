@@ -79,8 +79,12 @@ final class RemoteControlStore: ObservableObject {
     }
 
     var currentLevelName: String {
-        levels.first(where: { $0.id == selectedLevelID })?.name ?? instrumentName
+        if case .masterFX = wireTarget { return componentNames[selectedMasterFXComponent] ?? selectedMasterFXComponent }
+        if case .tool = wireTarget { return instrumentName.isEmpty ? "TOOL STATE" : instrumentName }
+        return levels.first(where: { $0.id == selectedLevelID })?.name ?? instrumentName
     }
+
+    @Published var selectedMasterFXComponent = "master_fx:fx1"
 
     /// Parameters for the selected hierarchy level, preserving Schwung's declared order.
     var visibleParameters: [RemoteParameter] {
@@ -213,10 +217,21 @@ final class RemoteControlStore: ObservableObject {
 
     private func run(task: URLSessionWebSocketTask, generation: Int) async {
         do {
-            if case .slot(let slot) = wireTarget {
+            switch wireTarget {
+            case .slot(let slot):
                 try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": slot])))
                 guard generation == connectionGeneration else { return }
                 beginLoading()
+            case .masterFX:
+                try await task.send(.string(Self.jsonString(["type": "subscribe_master_fx"])))
+                guard generation == connectionGeneration else { return }
+                beginLoading()
+            case .tool:
+                try await task.send(.string(Self.jsonString(["type": "subscribe_tool"])))
+                guard generation == connectionGeneration else { return }
+                beginLoading()
+            case .unverified:
+                break
             }
             guard generation == connectionGeneration else { return }
             connection = .connected
@@ -267,19 +282,24 @@ final class RemoteControlStore: ObservableObject {
         case .unverified(let reason):
             loadState = .unsupported(reason)
         case .slot(let slot):
-            if isConnected {
-                subscribe(slot: slot)
-            } else {
-                loadState = .idle
-            }
+            if isConnected { subscribe(slot: slot) } else { loadState = .idle }
+        case .masterFX:
+            if isConnected { beginLoading(); send(["type": "subscribe_master_fx"]) } else { loadState = .idle }
+        case .tool:
+            if isConnected { beginLoading(); send(["type": "subscribe_tool"]) } else { loadState = .idle }
         }
     }
 
     /// Re-requests the current destination's metadata.
     func refresh() {
-        guard isConnected, case .slot(let slot) = wireTarget else { return }
+        guard isConnected else { return }
         clearPresentedData()
-        subscribe(slot: slot)
+        switch wireTarget {
+        case .slot(let slot): subscribe(slot: slot)
+        case .masterFX: beginLoading(); send(["type": "subscribe_master_fx"])
+        case .tool: beginLoading(); send(["type": "subscribe_tool"])
+        case .unverified: break
+        }
     }
 
     private func subscribe(slot: Int) {
@@ -406,11 +426,21 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func sendParameter(_ text: String, for parameter: RemoteParameter) {
-        guard case .slot(let slot) = wireTarget else { return }
         values[parameter.wireKey] = text
         guard lastSent[parameter.wireKey] != text else { return }
         lastSent[parameter.wireKey] = text
-        send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
+        switch wireTarget {
+        case .slot(let slot):
+            send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
+        case .masterFX:
+            send(["type": "set_master_fx_param", "key": parameter.wireKey, "value": text])
+        case .tool:
+            // Tool state currently arrives without parameter type/range metadata.
+            // Generic values stay read-only until Schwung exposes safe editable metadata.
+            break
+        case .unverified:
+            break
+        }
     }
 
     // MARK: Sending
@@ -437,21 +467,118 @@ final class RemoteControlStore: ObservableObject {
             RemoteDiagnostics.log("ignored undecodable message")
             return
         }
-        // Everything we act on is addressed to the current destination; anything else is late/stale.
-        guard case .slot(let currentSlot) = wireTarget,
-              let messageSlot = message["slot"] as? Int,
-              messageSlot == currentSlot else {
-            RemoteDiagnostics.log("ignored \(type) not addressed to current destination")
+        // These two protocol messages are global and do not carry a slot.
+        if type == "master_fx_info" {
+            guard case .masterFX = wireTarget else { return }
+            handleMasterFXInfo(message)
+            return
+        }
+        if type == "tool_info" {
+            guard case .tool = wireTarget else { return }
+            handleToolInfo(message)
+            return
+        }
+        if type == "error" {
+            let messageText = message["message"] as? String ?? "Schwung Manager returned an error."
+            RemoteDiagnostics.log("server error: \(messageText)")
+            if loadState == .loading { loadState = .error(messageText) }
             return
         }
 
-        switch type {
-        case "slot_info": handleSlotInfo(message)
-        case "hierarchy": handleHierarchy(message)
-        case "chain_params": handleChainParams(message)
-        case "param_update": handleParamUpdate(message)
-        default: RemoteDiagnostics.log("unhandled message type \(type)")
+        switch wireTarget {
+        case .slot(let currentSlot):
+            guard let messageSlot = message["slot"] as? Int, messageSlot == currentSlot else {
+                RemoteDiagnostics.log("ignored \(type) not addressed to current slot")
+                return
+            }
+            switch type {
+            case "slot_info": handleSlotInfo(message)
+            case "hierarchy": handleHierarchy(message)
+            case "chain_params": handleChainParams(message)
+            case "param_update": handleParamUpdate(message)
+            default: RemoteDiagnostics.log("unhandled message type \(type)")
+            }
+        case .masterFX:
+            guard (message["slot"] as? Int) == 0 else { return }
+            switch type {
+            case "chain_params": handleMasterFXChainParams(message)
+            case "param_update": handleParamUpdate(message)
+            default: break
+            }
+        case .tool:
+            guard (message["slot"] as? Int) == 0 else { return }
+            if type == "param_update" { handleToolParamUpdate(message) }
+        case .unverified:
+            break
         }
+    }
+
+    private func handleMasterFXInfo(_ message: [String: Any]) {
+        guard let modules = message["fx"] as? [String] else {
+            loadState = .error("Schwung did not return the Master FX listing.")
+            return
+        }
+        var names: [String: String] = [:]
+        for index in 0..<min(modules.count, 8) {
+            let module = modules[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !module.isEmpty { names["master_fx:fx\(index + 1)"] = module }
+        }
+        componentNames = names
+        if !names.keys.contains(selectedMasterFXComponent) {
+            selectedMasterFXComponent = names.keys.sorted().first ?? "master_fx:fx1"
+        }
+        if names.isEmpty {
+            loadState = .loaded
+            loadTimeoutTask?.cancel()
+        }
+    }
+
+    private func handleToolInfo(_ message: [String: Any]) {
+        instrumentName = (message["id"] as? String) ?? ""
+        parameters = []
+        values = [:]
+        lastSent = [:]
+        if instrumentName.isEmpty {
+            loadState = .loaded
+            loadTimeoutTask?.cancel()
+        }
+    }
+
+    private func handleMasterFXChainParams(_ message: [String: Any]) {
+        guard let component = message["component"] as? String,
+              component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil,
+              let items = message["data"] as? [[String: Any]] else { return }
+        let parsed = items.compactMap { RemoteParameter.parse($0, component: component) }
+        parameters = parameters.filter { $0.component != component } + parsed
+        loadState = .loaded
+        loadTimeoutTask?.cancel()
+    }
+
+    private func handleToolParamUpdate(_ message: [String: Any]) {
+        guard let params = message["params"] as? [String: Any] else { return }
+        var merged = values
+        for (key, value) in params where key.hasPrefix("overtake_dsp:") {
+            let text: String?
+            if let string = value as? String { text = string }
+            else if let number = value as? NSNumber { text = number.stringValue }
+            else { text = nil }
+            guard let text else { continue }
+            merged[key] = text
+            if !parameters.contains(where: { $0.wireKey == key }) {
+                let rawName = String(key.dropFirst("overtake_dsp:".count))
+                parameters.append(RemoteParameter(
+                    component: "tool", key: key,
+                    name: rawName.replacingOccurrences(of: "_", with: " ").capitalized,
+                    shortName: "", type: "tool_read_only", minimum: 0, maximum: 1,
+                    step: 0.01, defaultValue: 0, options: [],
+                    rawDefinition: "Tool value reported by overtake_dsp:state; parameter metadata is not exposed by the standard Tool protocol."
+                ))
+            }
+        }
+        values = merged
+        for (key, value) in merged { lastSent[key] = value }
+        loadState = .loaded
+        loadTimeoutTask?.cancel()
     }
 
     private func handleSlotInfo(_ message: [String: Any]) {
@@ -528,7 +655,8 @@ final class RemoteControlStore: ObservableObject {
 
     private func handleChainParams(_ message: [String: Any]) {
         guard let component = message["component"] as? String,
-              ["midi_fx1", "synth", "fx1", "fx2"].contains(component) else {
+              (["midi_fx1", "synth", "fx1", "fx2"].contains(component) ||
+               component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil) else {
             // Never silently classify an unlabelled FX response as instrument parameters.
             RemoteDiagnostics.log("chain_params missing or unknown component; ignored")
             return
