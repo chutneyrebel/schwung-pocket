@@ -435,6 +435,28 @@ final class RemoteControlStore: ObservableObject {
         RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
     }
 
+    func swapMasterFXModule(component: String, moduleID: String) {
+        guard isConnected, case .masterFX = wireTarget else { return }
+        guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
+            slotModulesError = "This Master FX position cannot be changed from the app."
+            return
+        }
+        guard let module = availableSlotModules.first(where: { $0.id == moduleID }),
+              module.componentType == "audio_fx",
+              !module.deviceOnly,
+              let dspPath = module.dsp_path,
+              !dspPath.isEmpty else {
+            slotModulesError = "That effect has no usable DSP path or cannot be loaded from the app."
+            return
+        }
+        parameters.removeAll { $0.component == component }
+        values = values.filter { !$0.key.hasPrefix(component + ":") }
+        lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        beginLoading()
+        send(["type": "set_master_fx_param", "key": "\(component):module", "value": dspPath])
+        RemoteDiagnostics.log("Requested Master FX swap: component=\(component) module=\(module.id)")
+    }
+
     // MARK: Parameter intents
 
     func beginEditing(_ parameter: RemoteParameter) { editingKeys.insert(parameter.wireKey) }
