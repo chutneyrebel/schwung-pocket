@@ -226,7 +226,7 @@ struct ManagerWebView: UIViewRepresentable {
 
         func enablePortalAudio(in webView: WKWebView) {
             let script = #"""
-            (async () => {
+            (() => {
               const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
               const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.getAttribute('data-state'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
               const controls = [...document.querySelectorAll('button,[role="button"],a,[onclick],input[type="button"],label')].filter(visible);
@@ -247,14 +247,12 @@ struct ManagerWebView: UIViewRepresentable {
               });
               const contexts = window.__spAudioContexts || [];
               let resumedContexts = 0;
-              for (const context of contexts) {
+              contexts.forEach(context => {
                 if (context && context.state !== 'closed') {
-                  if (context.state === 'suspended') {
-                    try { await context.resume(); } catch (_) {}
-                  }
-                  if (context.state === 'running') resumedContexts++;
+                  if (context.state === 'suspended') context.resume().catch(() => {});
+                  if (context.state === 'running' || context.state === 'suspended') resumedContexts++;
                 }
-              }
+              });
               if (!toggle && mediaCount === 0 && resumedContexts === 0) return 'not-found';
               return controlResult;
             })();
