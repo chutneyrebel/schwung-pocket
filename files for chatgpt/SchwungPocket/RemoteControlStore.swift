@@ -72,6 +72,7 @@ final class RemoteControlStore: ObservableObject {
     private var resumeAfterBackground = false
     private var editingKeys = Set<String>()
     private var lastSent: [String: String] = [:]
+    private var pendingMasterFXClears: [String: Date] = [:]
 
     // MARK: Derived state
 
@@ -510,22 +511,44 @@ final class RemoteControlStore: ObservableObject {
                             module.dsp_path.map { (module.id, $0) }
                         }, uniquingKeysWith: { first, _ in first })
                         catalogue = catalogue.map { module in
-                            guard module.dsp_path?.isEmpty != false else { return module }
-                            let path = paths[module.id]
+                            let installedMatch = slotModules.first(where: { $0.id == module.id })
                                 ?? slotModules.first(where: {
                                     $0.name.caseInsensitiveCompare(module.name) == .orderedSame
                                         && $0.component_type == module.component_type
-                                })?.dsp_path
+                                })
+                            let path = module.dsp_path.flatMap { $0.isEmpty ? nil : $0 }
+                                ?? paths[module.id]
+                                ?? installedMatch?.dsp_path
                             guard let path, !path.isEmpty else { return module }
                             return RemoteSlotModule(
                                 id: module.id,
                                 name: module.name,
                                 component_type: module.component_type,
-                                device_only: module.device_only,
+                                device_only: module.device_only ?? installedMatch?.device_only,
                                 dsp_path: path,
-                                installed: module.installed,
+                                installed: module.installed ?? (installedMatch != nil),
                                 installed_version: module.installed_version
                             )
+                        }
+
+                        // /api/slot-modules is the authoritative installed-on-disk list.
+                        // Keep its entries even when /api/modules uses different IDs or
+                        // omits a catalogue entry. In particular, Master FX needs the
+                        // absolute dsp_path supplied by this endpoint.
+                        for installedModule in slotModules where !catalogue.contains(where: {
+                            $0.id == installedModule.id
+                                || ($0.name.caseInsensitiveCompare(installedModule.name) == .orderedSame
+                                    && $0.component_type == installedModule.component_type)
+                        }) {
+                            catalogue.append(RemoteSlotModule(
+                                id: installedModule.id,
+                                name: installedModule.name,
+                                component_type: installedModule.component_type,
+                                device_only: installedModule.device_only,
+                                dsp_path: installedModule.dsp_path,
+                                installed: true,
+                                installed_version: installedModule.installed_version
+                            ))
                         }
                     }
                     guard !Task.isCancelled else { return }
@@ -672,6 +695,7 @@ final class RemoteControlStore: ObservableObject {
         // Allow the clear command even if the latest listing omitted the name.
         // The Move is authoritative about whether this position is occupied.
         slotModulesError = nil
+        pendingMasterFXClears[component] = Date()
         clearComponentPresentation(component)
         beginLoading()
         // Schwung's Remote UI uses an empty DSP path to unload a Master FX
@@ -989,8 +1013,18 @@ final class RemoteControlStore: ObservableObject {
         masterFXCapacity = min(max(message["cap"] as? Int ?? 4, 1), 8)
         var names: [String: String] = [:]
         for index in 0..<min(modules.count, masterFXCapacity) {
+            let component = "master_fx:fx\(index + 1)"
             let module = modules[index].trimmingCharacters(in: .whitespacesAndNewlines)
-            if !module.isEmpty { names["master_fx:fx\(index + 1)"] = module }
+            if let clearStarted = pendingMasterFXClears[component] {
+                if Date().timeIntervalSince(clearStarted) < 2.5 {
+                    // The command clears the device immediately, but an older
+                    // master_fx_info can still be queued behind the clear. Do not
+                    // resurrect that position from the stale listing.
+                    continue
+                }
+                pendingMasterFXClears.removeValue(forKey: component)
+            }
+            if !module.isEmpty { names[component] = module }
         }
         // A Master FX position can be changed directly on the Move while this
         // screen remains open. Drop parameter metadata and cached values for any
