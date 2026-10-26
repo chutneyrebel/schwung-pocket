@@ -216,9 +216,12 @@ struct ManagerWebView: UIViewRepresentable {
               const recordButton = controls.querySelector('[data-action="record"]');
               const muteButton = document.getElementById('mute');
               const recButton = document.getElementById('rec');
+              const setLabelIfChanged = (button, label) => {
+                if (button && button.textContent !== label) button.textContent = label;
+              };
               const refreshControlLabels = () => {
-                if (muteButton) audioButton.textContent = /unmute/i.test(muteButton.textContent || '') ? 'Enable audio' : 'Mute audio';
-                if (recButton) recordButton.textContent = /stop/i.test(recButton.textContent || '') ? 'Stop recording' : 'Record';
+                if (muteButton) setLabelIfChanged(audioButton, /unmute/i.test(muteButton.textContent || '') ? 'Enable audio' : 'Mute audio');
+                if (recButton) setLabelIfChanged(recordButton, /stop/i.test(recButton.textContent || '') ? 'Stop recording' : 'Record');
               };
               audioButton.addEventListener('click', event => { event.stopPropagation(); if (muteButton) muteButton.click(); refreshControlLabels(); });
               recordButton.addEventListener('click', event => { event.stopPropagation(); if (recButton) recButton.click(); setTimeout(refreshControlLabels, 80); });
