@@ -549,7 +549,7 @@ final class RemoteControlStore: ObservableObject {
 
     func refreshSlotMixStates() {
         guard isConnected else { return }
-        for slot in 0...3 { subscribe(to: .slot(slot)) }
+        for slot in 0...3 { subscribe(slot: slot) }
     }
 
     func setSlotVolume(_ proposed: Double) {
