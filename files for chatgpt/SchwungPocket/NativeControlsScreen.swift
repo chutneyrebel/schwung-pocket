@@ -1,6 +1,32 @@
 import SwiftUI
 import UIKit
 
+private enum SchwungChainComponent: String, CaseIterable, Identifiable {
+    case midiFX = "midi_fx1"
+    case instrument = "synth"
+    case audioFX1 = "fx1"
+    case audioFX2 = "fx2"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .midiFX: return "MIDI FX"
+        case .instrument: return "Instrument"
+        case .audioFX1: return "Audio FX 1"
+        case .audioFX2: return "Audio FX 2"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .midiFX: return "pianokeys"
+        case .instrument: return "waveform"
+        case .audioFX1, .audioFX2: return "slider.horizontal.3"
+        }
+    }
+}
+
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
@@ -8,6 +34,7 @@ struct NativeControlsScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(RemoteDiagnostics.defaultsKey) private var diagnosticsEnabled = false
     @State private var copiedReport = false
+    @State private var selectedChainComponent: SchwungChainComponent = .instrument
 
     var body: some View {
         ModuleScreenShell(
@@ -17,7 +44,10 @@ struct NativeControlsScreen: View {
         ) {
             connectionCard
             destinationCard
-            if isInstrumentSlot { slotSettingsCard }
+            if isInstrumentSlot {
+                slotChainCard
+                slotSettingsCard
+            }
             contentSection
         }
         .onAppear {
@@ -87,14 +117,76 @@ struct NativeControlsScreen: View {
                     Text(remote.instrumentName.isEmpty ? " " : remote.instrumentName)
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent).lineLimit(1)
                 }
-                DestinationSelector(selection: remote.destination) { remote.select($0) }
-                if remote.levels.count > 1 {
-                    Picker("Parameter group", selection: $remote.selectedLevelID) {
+                DestinationSelector(selection: remote.destination) {
+                    selectedChainComponent = .instrument
+                    remote.select($0)
+                }
+                if selectedChainComponent == .instrument && remote.levels.count > 1 {
+                    Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
                         ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
                     }.pickerStyle(.menu).tint(Theme.accent)
                 }
             }
         }
+    }
+
+    // MARK: Slot signal chain
+
+    private var slotChainCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SLOT SIGNAL CHAIN")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.muted)
+                Text("MIDI FX → Instrument → Audio FX")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
+                    ForEach(SchwungChainComponent.allCases) { component in
+                        let selected = selectedChainComponent == component
+                        let moduleName = remote.componentNames[component.rawValue]
+                        Button {
+                            selectedChainComponent = component
+                        } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: component.symbol)
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(component.title)
+                                        .font(.system(size: 12, weight: .bold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                }
+                                Text(moduleName ?? "Not loaded")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .lineLimit(1)
+                                    .foregroundStyle(selected ? Theme.background.opacity(0.8) : Theme.muted)
+                            }
+                            .foregroundStyle(selected ? Theme.background : Color.white)
+                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .background(selected ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(component.title), \(moduleName ?? "not loaded")")
+                    }
+                }
+            }
+        }
+    }
+
+    private var selectedComponentParameters: [RemoteParameter] {
+        if selectedChainComponent == .instrument {
+            return remote.visibleParameters.filter { $0.component == selectedChainComponent.rawValue }
+        }
+        return remote.parameters
+            .filter { $0.component == selectedChainComponent.rawValue }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     // MARK: Slot settings
@@ -231,11 +323,14 @@ struct NativeControlsScreen: View {
             messageCard(icon: "waveform.path.ecg", title: "Ready to discover controls",
                         text: remote.isConnected ? "Pick a destination above." : "Connect to Schwung to load the selected destination.")
         case .loaded:
-            if remote.parameters.isEmpty {
-                messageCard(icon: "square.dashed", title: "Nothing to control here",
-                            text: "No instrument parameters were reported for \(remote.destination.title).")
+            if selectedComponentParameters.isEmpty {
+                let loadedName = remote.componentNames[selectedChainComponent.rawValue]
+                let emptyText = loadedName == nil
+                    ? "No \(selectedChainComponent.title.lowercased()) is reported in this slot. Load one in Schwung on Move, then tap Reload."
+                    : "Schwung reported \(loadedName ?? selectedChainComponent.title), but no editable parameters were returned."
+                messageCard(icon: "square.dashed", title: "\(selectedChainComponent.title) has no controls", text: emptyText)
             } else {
-                parameterBank
+                parameterBank(selectedComponentParameters)
             }
         }
     }
@@ -250,8 +345,7 @@ struct NativeControlsScreen: View {
         }
     }
 
-    private var parameterBank: some View {
-        let visible = remote.visibleParameters
+    private func parameterBank(_ visible: [RemoteParameter]) -> some View {
         let knobs = visible.filter { $0.kind == .knob }
         let others = visible.filter { $0.kind != .knob }
         return PocketCard {
