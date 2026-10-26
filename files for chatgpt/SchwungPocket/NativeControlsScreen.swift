@@ -243,7 +243,7 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.muted)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
-                    ForEach(1...8, id: \.self) { index in
+                    ForEach(1...max(remote.masterFXCapacity, 1), id: \.self) { index in
                         let key = "master_fx:fx\(index)"
                         let moduleName = remote.componentNames[key]
                         let selected = remote.selectedMasterFXComponent == key
