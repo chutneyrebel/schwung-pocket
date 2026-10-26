@@ -59,6 +59,16 @@ enum RemoteProtocolAdapter {
     }
 }
 
+struct RemoteSlotModule: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let component_type: String
+    let device_only: Bool?
+
+    var componentType: String { component_type }
+    var deviceOnly: Bool { device_only ?? false }
+}
+
 // MARK: - Parameters
 
 enum RemoteControlKind: Equatable {
