@@ -19,6 +19,7 @@ struct ManagerWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
         let audioContextObserver = WKUserScript(
             source: #"""
             (() => {
@@ -225,28 +226,47 @@ struct ManagerWebView: UIViewRepresentable {
 
         func enablePortalAudio(in webView: WKWebView) {
             let script = #"""
-            (() => {
+            (async () => {
               const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
               const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.getAttribute('data-state'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
               const controls = [...document.querySelectorAll('button,[role="button"],a,[onclick],input[type="button"],label')].filter(visible);
               const toggle = controls.find(el => /\b(unmute|mute|audio|sound)\b/i.test(label(el)) && !/volume\s*(up|down)|increase\s*volume|decrease\s*volume/i.test(label(el)));
+              let controlResult = 'toggled';
               if (toggle) {
                 const text = label(toggle);
                 toggle.click();
-                return /\bunmute\b|enable\s*(sound|audio)/i.test(text) ? 'enabled' : /\bmute\b/i.test(text) ? 'muted' : 'toggled';
+                controlResult = /\bunmute\b|enable\s*(sound|audio)/i.test(text) ? 'enabled' : /\bmute\b/i.test(text) ? 'muted' : 'toggled';
               }
               let mediaCount = 0;
-              document.querySelectorAll('audio,video').forEach(media => { media.muted = !media.muted; media.volume = 1; mediaCount++; if (!media.muted) { const p = media.play(); if (p && p.catch) p.catch(() => {}); } });
+              document.querySelectorAll('audio,video').forEach(media => {
+                media.muted = false;
+                media.volume = 1;
+                mediaCount++;
+                const p = media.play();
+                if (p && p.catch) p.catch(() => {});
+              });
               const contexts = window.__spAudioContexts || [];
               let resumedContexts = 0;
-              contexts.forEach(context => { if (context && context.state !== 'closed') { if (context.state === 'suspended') context.resume().catch(() => {}); resumedContexts++; } });
-              return mediaCount > 0 || resumedContexts > 0 ? 'toggled' : 'not-found';
+              for (const context of contexts) {
+                if (context && context.state !== 'closed') {
+                  if (context.state === 'suspended') {
+                    try { await context.resume(); } catch (_) {}
+                  }
+                  if (context.state === 'running') resumedContexts++;
+                }
+              }
+              if (!toggle && mediaCount === 0 && resumedContexts === 0) return 'not-found';
+              return controlResult;
             })();
             """#
             webView.evaluateJavaScript(script) { [weak self] result, error in
                 DispatchQueue.main.async {
-                    if let error { NSLog("Schwung Pocket could not toggle portal audio: %@", error.localizedDescription); self?.onAudioControlResult?("not-found") }
-                    else { self?.onAudioControlResult?((result as? String) ?? "not-found") }
+                    if let error {
+                        NSLog("Schwung Pocket could not toggle portal audio: %@", error.localizedDescription)
+                        self?.onAudioControlResult?("not-found")
+                    } else {
+                        self?.onAudioControlResult?((result as? String) ?? "not-found")
+                    }
                 }
             }
         }
