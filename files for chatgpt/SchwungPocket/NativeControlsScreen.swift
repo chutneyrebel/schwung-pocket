@@ -40,6 +40,7 @@ struct NativeControlsScreen: View {
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
+    @State private var pendingMasterFXClearComponent: String?
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
     var body: some View {
@@ -88,6 +89,24 @@ struct NativeControlsScreen: View {
             }
         } message: {
             Text("This unloads the module from the selected signal-chain position.")
+        }
+        .confirmationDialog(
+            "Clear Master FX position?",
+            isPresented: Binding(
+                get: { pendingMasterFXClearComponent != nil },
+                set: { if !$0 { pendingMasterFXClearComponent = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let component = pendingMasterFXClearComponent {
+                Button("Clear Effect", role: .destructive) {
+                    remote.clearMasterFXModule(component: component)
+                    pendingMasterFXClearComponent = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingMasterFXClearComponent = nil }
+        } message: {
+            Text("This unloads the effect from that Master FX chain position.")
         }
     }
 
@@ -524,36 +543,57 @@ struct NativeControlsScreen: View {
                         let key = "master_fx:fx\(index)"
                         let moduleName = remote.componentNames[key]
                         let selected = remote.selectedMasterFXComponent == key
-                        Button {
-                            remote.selectedMasterFXComponent = key
-                        } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(key) ? Theme.warning : Theme.success))
-                                        .frame(width: 6, height: 6)
-                                    Text("Master FX \(index)")
-                                        .font(.system(size: 12, weight: .bold))
+                        HStack(spacing: 6) {
+                            Button {
+                                remote.selectedMasterFXComponent = key
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(key) ? Theme.warning : Theme.success))
+                                            .frame(width: 6, height: 6)
+                                        Text("Master FX \(index)")
+                                            .font(.system(size: 12, weight: .bold))
+                                    }
+                                    Text(moduleName ?? "Empty slot")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .lineLimit(1)
+                                        .foregroundStyle(Theme.muted)
                                 }
-                                Text(moduleName ?? "Empty slot")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .lineLimit(1)
-                                    .foregroundStyle(Theme.muted)
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .background {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Theme.surfaceRaised)
+                                }
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
+                                }
                             }
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .background {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.surfaceRaised)
-                            }
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
+                            .buttonStyle(.plain)
+                            if moduleName != nil {
+                                Button {
+                                    pendingMasterFXClearComponent = key
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .frame(width: 30, height: 30)
+                                        .foregroundStyle(Theme.warning)
+                                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Clear Master FX \(index)")
                             }
                         }
-                        .buttonStyle(.plain)
                     }
+                }
+                if let error = remote.slotModulesError {
+                    Text(error)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
