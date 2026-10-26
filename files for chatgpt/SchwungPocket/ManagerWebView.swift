@@ -121,7 +121,7 @@ struct ManagerWebView: UIViewRepresentable {
               const fit = __FIT__;
               const styleId = 'schwung-pocket-mirror-overrides';
               if (!window.__spMirrorChromeObserver) {
-                window.__spMirrorChromeObserver = new MutationObserver(() => {
+                const scheduleMirrorRefresh = () => {
                   if (window.__spMirrorChromeTimer) clearTimeout(window.__spMirrorChromeTimer);
                   window.__spMirrorChromeTimer = setTimeout(() => {
                     try {
@@ -129,8 +129,23 @@ struct ManagerWebView: UIViewRepresentable {
                       window.__spHideMirrorPortalChrome && window.__spHideMirrorPortalChrome();
                     } catch (_) {}
                   }, 120);
+                };
+                // Schwung Manager's fullscreen toggle can change classes/visibility
+                // without inserting DOM nodes. Watch those state changes, but not
+                // style attributes, which this script itself modifies.
+                window.__spMirrorChromeObserver = new MutationObserver((records) => {
+                  if (records.some(record => record.type === 'childList' ||
+                      ['class', 'hidden', 'aria-expanded', 'data-state'].includes(record.attributeName))) {
+                    scheduleMirrorRefresh();
+                  }
                 });
-                window.__spMirrorChromeObserver.observe(document.documentElement, {childList:true, subtree:true});
+                window.__spMirrorChromeObserver.observe(document.documentElement, {
+                  childList: true, subtree: true, attributes: true,
+                  attributeFilter: ['class', 'hidden', 'aria-expanded', 'data-state']
+                });
+                window.addEventListener('fullscreenchange', scheduleMirrorRefresh, true);
+                window.addEventListener('resize', scheduleMirrorRefresh, true);
+                window.addEventListener('orientationchange', scheduleMirrorRefresh, true);
               }
               let style = document.getElementById(styleId);
               if (!style) { style = document.createElement('style'); style.id = styleId; document.head.appendChild(style); }
