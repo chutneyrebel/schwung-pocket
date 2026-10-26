@@ -37,7 +37,7 @@ struct ContentView: View {
     @State private var navigationHideTask: Task<Void, Never>?
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,nativeControls,modules,mirror,manager,files,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
-    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 3
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 1
     @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
 
     private var shouldAutoHideNavigationForSelectedTab: Bool {
@@ -189,7 +189,7 @@ struct ContentView: View {
             return
         }
         navigationHideTask = Task { @MainActor in
-            let seconds = max(3, min(60, navigationAutoHideSeconds))
+            let seconds = max(1, min(60, navigationAutoHideSeconds))
             try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
             guard !Task.isCancelled, shouldAutoHideNavigationForSelectedTab else { return }
             withAnimation(.easeInOut(duration: 0.2)) { navigationHidden = true }
@@ -1498,7 +1498,7 @@ private struct FullscreenMirrorView: View {
     @State private var recordMessage = ""
     @AppStorage("SchwungPocket.MirrorKeepAwake.v1") private var keepAwake = true
     @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var controlsAutoHideEnabled = true
-    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var controlsAutoHideSeconds = 5
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var controlsAutoHideSeconds = 1
     @State private var showControlsButton = false
     @State private var controlsButtonHideTask: Task<Void, Never>?
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -1711,10 +1711,10 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.DefaultMoveID.v1") private var defaultMoveID = ""
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
-    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 3
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 1
     @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
     @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
-    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 5
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 1
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
 
@@ -1906,6 +1906,7 @@ private struct ConnectionSettingsScreen: View {
                                 .font(.system(size: 13, weight: .medium)).tint(Theme.accent)
                             if mirrorControlsAutoHideEnabled {
                                 Picker("Hide after", selection: $mirrorControlsAutoHideSeconds) {
+                                    Text("1 second").tag(1)
                                     Text("3 seconds").tag(3)
                                     Text("5 seconds").tag(5)
                                     Text("10 seconds").tag(10)
@@ -1946,6 +1947,7 @@ private struct ConnectionSettingsScreen: View {
                                     .tint(Theme.accent)
                                 }
                                 Picker("Hide after", selection: $navigationAutoHideSeconds) {
+                                    Text("1 second").tag(1)
                                     Text("3 seconds").tag(3)
                                     Text("5 seconds").tag(5)
                                     Text("10 seconds").tag(10)
