@@ -203,18 +203,18 @@ struct NativeControlsScreen: View {
                                 Text(moduleName ?? "Not loaded")
                                     .font(.system(size: 10, weight: .medium))
                                     .lineLimit(1)
-                                    .foregroundStyle(selected ? Theme.background.opacity(0.8) : Theme.muted)
+                                    .foregroundStyle(Theme.muted)
                             }
-                            .foregroundStyle(selected ? Theme.background : Color.white)
+                            .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                             .padding(.horizontal, 10)
                             .background {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(selected ? Theme.accent : Theme.surfaceRaised)
+                                    .fill(Theme.surfaceRaised)
                             }
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
                             }
                             .animation(.easeInOut(duration: 0.16), value: selected)
                         }
@@ -378,18 +378,18 @@ struct NativeControlsScreen: View {
                                 Text(moduleName ?? "Empty slot")
                                     .font(.system(size: 10, weight: .medium))
                                     .lineLimit(1)
-                                    .foregroundStyle(selected ? Theme.background.opacity(0.8) : Theme.muted)
+                                    .foregroundStyle(Theme.muted)
                             }
-                            .foregroundStyle(selected ? Theme.background : Color.white)
+                            .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                             .padding(.horizontal, 10)
                             .background {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(selected ? Theme.accent : Theme.surfaceRaised)
+                                    .fill(Theme.surfaceRaised)
                             }
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
                             }
                         }
                         .buttonStyle(.plain)
