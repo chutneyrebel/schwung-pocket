@@ -538,6 +538,35 @@ final class RemoteControlStore: ObservableObject {
         RemoteDiagnostics.log("Requested module clear: slot=\(slot) component=\(component)")
     }
 
+    /// Schwung's chain host exposes per-module bypass flags independently of
+    /// a module's own parameter metadata. This is distinct from slot mute.
+    func isComponentBypassed(_ component: String) -> Bool {
+        let key = component + ":bypassed"
+        return values[key] == "1" || values[key] == "true"
+    }
+
+    func setComponentBypassed(_ component: String, bypassed: Bool) {
+        guard isConnected, componentNames[component] != nil else { return }
+        let value = bypassed ? "1" : "0"
+        switch wireTarget {
+        case .slot(let slot):
+            let isSupported = component == "synth"
+                || component.range(of: #"^midi_fx[1-8]$"#, options: .regularExpression) != nil
+                || component.range(of: #"^fx[1-8]$"#, options: .regularExpression) != nil
+            guard isSupported else { return }
+            values[component + ":bypassed"] = value
+            send(["type": "set_param", "slot": slot, "key": component + ":bypassed", "value": value])
+        case .masterFX:
+            guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else { return }
+            values[component + ":bypassed"] = value
+            send(["type": "set_master_fx_param", "key": component + ":bypassed", "value": value])
+        case .tool, .unverified:
+            // The standard Tool protocol has no generic bypass command.
+            break
+        }
+        RemoteDiagnostics.log("Requested module bypass: destination=\(destination.title) component=\(component) bypassed=\(bypassed)")
+    }
+
     func swapMasterFXModule(component: String, moduleID: String) {
         guard isConnected, case .masterFX = wireTarget else { return }
         guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
