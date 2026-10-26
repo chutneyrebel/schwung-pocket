@@ -686,7 +686,7 @@ struct DestinationSelector: View {
                                 .font(.system(size: 12, weight: .bold))
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
-                        .foregroundStyle(isSelected ? Theme.background : Color.white)
+                        .foregroundStyle(Color.white)
                         .frame(maxWidth: .infinity, minHeight: 42)
                         .contentShape(Rectangle())
                     }
