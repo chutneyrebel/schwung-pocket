@@ -402,6 +402,14 @@ struct ManagerWebView: UIViewRepresentable {
         func enablePortalAudio(in webView: WKWebView) {
             let script = #"""
             (() => {
+              // Schwung Mirror has a stable audio toggle. It remains usable even
+              // while the page's native fullscreen mode hides the toolbar.
+              const portalMute = document.getElementById('mute');
+              if (portalMute) {
+                const before = (portalMute.textContent || '').trim();
+                portalMute.click();
+                return /unmute/i.test(before) ? 'enabled' : /mute/i.test(before) ? 'muted' : 'toggled';
+              }
               const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
               const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.getAttribute('data-state'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
               const controls = [...document.querySelectorAll('button,[role="button"],a,[onclick],input[type="button"],label')].filter(visible);
@@ -447,6 +455,14 @@ struct ManagerWebView: UIViewRepresentable {
         func triggerPortalRecording(in webView: WKWebView) {
             let script = #"""
             (() => {
+              // The Mirror page's own Record/Stop button works in and out of
+              // fullscreen; don't require it to be visible to the DOM hit-test.
+              const portalRecord = document.getElementById('rec');
+              if (portalRecord) {
+                const before = (portalRecord.textContent || '').trim();
+                portalRecord.click();
+                return /stop/i.test(before) ? 'stopped' : /record/i.test(before) ? 'started' : 'toggled';
+              }
               const visible = el => {
                 const s = getComputedStyle(el), r = el.getBoundingClientRect();
                 return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || 1) > 0 && r.width > 0 && r.height > 0;
