@@ -155,10 +155,11 @@ struct ContentView: View {
         }
         .padding(.horizontal, 5)
         .padding(.top, 4)
-        .background(Theme.background)
+        .background(Theme.background.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) {
             Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
         }
+        .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64, alignment: .top)
     }
 
     private func revealNavigation() {
