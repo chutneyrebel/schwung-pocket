@@ -701,14 +701,11 @@ struct NativeControlsScreen: View {
                     if resolvedSelectedMasterFXCustomUIURL == nil {
                         let moduleName = remote.componentNames[remote.selectedMasterFXComponent]
                         let advertisedPanel = remote.customComponentUIURLs[remote.selectedMasterFXComponent] != nil
-                        let emptyText: String
-                        if moduleName == nil {
-                            emptyText = "This Master FX position is empty. Load an effect on Move, then tap Reload."
-                        } else if advertisedPanel {
-                            emptyText = "Schwung reports \(moduleName ?? "this effect") and advertises a custom panel, but its URL could not be resolved safely. Check the Move address in Settings."
-                        } else {
-                            emptyText = "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata or custom panel for it."
-                        }
+                        let emptyText = moduleName == nil
+                            ? "This Master FX position is empty. Load an effect on Move, then tap Reload."
+                            : (advertisedPanel
+                                ? "Schwung reports \(moduleName ?? "this effect") and advertises a custom panel, but its URL could not be resolved safely. Check the Move address in Settings."
+                                : "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata or custom panel for it.")
                         messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
                     }
                 } else if isTool {
