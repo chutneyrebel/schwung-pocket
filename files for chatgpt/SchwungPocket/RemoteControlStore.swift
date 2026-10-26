@@ -514,8 +514,20 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func handleMasterFXInfo(_ message: [String: Any]) {
+        // Newer Schwung Manager builds explicitly mark an incomplete listing as
+        // unknown. This is a transient state, not an empty Master FX chain and
+        // not necessarily a malformed protocol response. Keep any last-known
+        // names visible, but surface the uncertainty so they are not mistaken
+        // for a confirmed live listing.
+        if (message["unknown"] as? Bool) == true {
+            RemoteDiagnostics.log("Master FX listing is temporarily unknown")
+            loadState = .error("Master FX state is temporarily unknown. Tap Reload to try again.")
+            loadTimeoutTask?.cancel()
+            return
+        }
         guard let modules = message["fx"] as? [String] else {
-            loadState = .error("Schwung did not return the Master FX listing.")
+            loadState = .error("Schwung did not return a valid Master FX listing.")
+            loadTimeoutTask?.cancel()
             return
         }
         var names: [String: String] = [:]
