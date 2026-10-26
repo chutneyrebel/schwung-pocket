@@ -1290,17 +1290,13 @@ private struct FilesScreen: View {
 }
 
 private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
-    case both, top, bottom, slot1, slot2, slot3, slot4
+    case both, top, bottom
     var id: String { rawValue }
     var title: String {
         switch self {
         case .both: return "Both"
         case .top: return "Top"
         case .bottom: return "Bottom"
-        case .slot1: return "Slot 1"
-        case .slot2: return "Slot 2"
-        case .slot3: return "Slot 3"
-        case .slot4: return "Slot 4"
         }
     }
     var symbol: String {
@@ -1308,7 +1304,6 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
         case .both: return "rectangle.split.2x1"
         case .top: return "rectangle.tophalf.filled"
         case .bottom: return "rectangle.bottomhalf.filled"
-        case .slot1, .slot2, .slot3, .slot4: return "square.grid.2x2"
         }
     }
 }
@@ -1484,19 +1479,38 @@ private struct FullscreenMirrorView: View {
                         }
                         .accessibilityLabel("Exit full-screen mirror")
                         Spacer()
-                        Menu {
-                            ForEach(MirrorDisplayMode.allCases.filter { verticalSizeClass == .compact ? $0.rawValue.hasPrefix("slot") : !$0.rawValue.hasPrefix("slot") }) { mode in
-                                Button { displayModeSelection = mode.rawValue } label: {
-                                    if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
+                        if verticalSizeClass == .compact {
+                            HStack(spacing: 6) {
+                                ForEach(MirrorDisplayMode.allCases) { mode in
+                                    Button { displayModeSelection = mode.rawValue } label: {
+                                        VStack(spacing: 3) {
+                                            Image(systemName: mode.symbol).font(.system(size: 15, weight: .semibold))
+                                            Text(mode.title).font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        }
+                                        .foregroundStyle(displayModeSelection == mode.rawValue ? Theme.accent : Theme.muted)
+                                        .frame(width: 48, height: 46)
+                                        .background(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.16) : Theme.background.opacity(0.97), in: RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.75) : Color.white.opacity(0.12), lineWidth: 1))
+                                    }
+                                    .accessibilityLabel("Show \(mode.title) display")
+                                    .accessibilityAddTraits(displayModeSelection == mode.rawValue ? .isSelected : [])
                                 }
                             }
-                        } label: {
-                            Label((MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).title, systemImage: (MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).symbol)
-                                .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
-                                .foregroundStyle(Theme.accent)
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(Theme.background.opacity(0.97), in: Capsule())
-                                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                        } else {
+                            Menu {
+                                ForEach(MirrorDisplayMode.allCases) { mode in
+                                    Button { displayModeSelection = mode.rawValue } label: {
+                                        if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
+                                    }
+                                }
+                            } label: {
+                                Label((MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).title, systemImage: (MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).symbol)
+                                    .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
+                                    .foregroundStyle(Theme.accent)
+                                    .padding(.horizontal, 12).padding(.vertical, 10)
+                                    .background(Theme.background.opacity(0.97), in: Capsule())
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            }
                         }
                         Button { audioTrigger = UUID() } label: {
                             Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .bold))
