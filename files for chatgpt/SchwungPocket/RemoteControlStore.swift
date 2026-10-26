@@ -363,7 +363,7 @@ final class RemoteControlStore: ObservableObject {
         isLoadingSlotModules = true
         slotModulesError = nil
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let input = trimmed.contains("://") ? trimmed : "http://\\(trimmed)"
+        let input = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
         guard var components = URLComponents(string: input), components.host != nil else {
             isLoadingSlotModules = false
             slotModulesError = "Enter a valid Move address before loading installed modules."
@@ -395,7 +395,7 @@ final class RemoteControlStore: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 self?.slotModulesError = "Could not read installed modules from this Schwung build. Update Schwung if /api/slot-modules is unavailable, then try again."
-                RemoteDiagnostics.log("slot module catalogue failed: \\(error.localizedDescription)")
+                RemoteDiagnostics.log("slot module catalogue failed: \(error.localizedDescription)")
             }
         }
     }
@@ -423,8 +423,8 @@ final class RemoteControlStore: ObservableObject {
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
         beginLoading()
-        send(["type": "set_param", "slot": slot, "key": "\\(component):module", "value": module.id])
-        RemoteDiagnostics.log("Requested module swap: slot=\\(slot) component=\\(component) module=\\(module.id)")
+        send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": module.id])
+        RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
     }
 
     // MARK: Parameter intents
