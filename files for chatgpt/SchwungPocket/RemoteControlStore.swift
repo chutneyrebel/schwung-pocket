@@ -554,10 +554,14 @@ final class RemoteControlStore: ObservableObject {
         parameters = []
         values = [:]
         lastSent = [:]
-        if instrumentName.isEmpty {
-            loadState = .loaded
-            loadTimeoutTask?.cancel()
-        }
+
+        // tool_info confirms that the Tool protocol responded. Its live state
+        // arrives separately via param_update, and some Tools expose no flat
+        // state values at all. Do not leave a responsive Tool stuck loading
+        // until the generic response timeout expires.
+        loadState = .loaded
+        loadTimeoutTask?.cancel()
+        RemoteDiagnostics.log("Tool info received: \(instrumentName.isEmpty ? "unnamed Tool" : instrumentName)")
     }
 
     private func handleMasterFXChainParams(_ message: [String: Any]) {
