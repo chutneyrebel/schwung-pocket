@@ -57,8 +57,6 @@ struct ContentView: View {
             ManagerScreen(device: device)
         case .files:
             FilesScreen(device: device)
-        case .mirror:
-            MirrorScreen(device: device, navigationHidden: navigationHidden, navigationAutoHideEnabled: navigationAutoHideEnabled)
         case .settings:
             ConnectionSettingsScreen(device: device)
         }
@@ -66,8 +64,16 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            content(for: selectedTab)
+            // Keep the Mirror WKWebView mounted while other sections are open so portal audio continues.
+            MirrorScreen(device: device, navigationHidden: navigationHidden, navigationAutoHideEnabled: navigationAutoHideEnabled)
+                .opacity(selectedTab == .mirror ? 1 : 0)
+                .allowsHitTesting(selectedTab == .mirror)
+                .accessibilityHidden(selectedTab != .mirror)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if selectedTab != .mirror {
+                content(for: selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .background(Theme.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -1282,13 +1288,17 @@ private struct FilesScreen: View {
 }
 
 private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
-    case both, top, bottom
+    case both, top, bottom, slot1, slot2, slot3, slot4
     var id: String { rawValue }
     var title: String {
         switch self {
         case .both: return "Both"
         case .top: return "Top"
         case .bottom: return "Bottom"
+        case .slot1: return "Slot 1"
+        case .slot2: return "Slot 2"
+        case .slot3: return "Slot 3"
+        case .slot4: return "Slot 4"
         }
     }
     var symbol: String {
@@ -1296,6 +1306,7 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
         case .both: return "rectangle.split.2x1"
         case .top: return "rectangle.tophalf.filled"
         case .bottom: return "rectangle.bottomhalf.filled"
+        case .slot1, .slot2, .slot3, .slot4: return "square.grid.2x2"
         }
     }
 }
@@ -1356,16 +1367,18 @@ private struct MirrorScreen: View {
 
                 HStack(spacing: 0) {
                     Menu {
-                        ForEach(MirrorDisplayMode.allCases) { mode in
+                        ForEach(MirrorDisplayMode.allCases.filter { !$0.rawValue.hasPrefix("slot") }) { mode in
                             Button { savedMirrorDisplayMode = mode.rawValue } label: {
                                 if mirrorDisplayMode == mode { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
                             }
                         }
                     } label: {
-                        Label(mirrorDisplayMode.title, systemImage: mirrorDisplayMode.symbol)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 46)
-                            .contentShape(Rectangle())
+                        VStack(spacing: 3) {
+                            Image(systemName: mirrorDisplayMode.symbol).font(.system(size: 17, weight: .semibold))
+                            Text(mirrorDisplayMode.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel("Choose mirrored display layout")
                     Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
@@ -1422,6 +1435,11 @@ private struct FullscreenMirrorView: View {
     @State private var showingRecordMessage = false
     @State private var recordMessage = ""
     @AppStorage("SchwungPocket.MirrorKeepAwake.v1") private var keepAwake = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var controlsAutoHideEnabled = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var controlsAutoHideSeconds = 5
+    @State private var showControlsButton = false
+    @State private var controlsButtonHideTask: Task<Void, Never>?
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1465,16 +1483,13 @@ private struct FullscreenMirrorView: View {
                         .accessibilityLabel("Exit full-screen mirror")
                         Spacer()
                         Menu {
-                            ForEach(MirrorDisplayMode.allCases) { mode in
-                                Button {
-                                    displayModeSelection = mode.rawValue
-                                } label: {
-                                    if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") }
-                                    else { Text(mode.title) }
+                            ForEach(MirrorDisplayMode.allCases.filter { verticalSizeClass == .compact ? $0.rawValue.hasPrefix("slot") : !$0.rawValue.hasPrefix("slot") }) { mode in
+                                Button { displayModeSelection = mode.rawValue } label: {
+                                    if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
                                 }
                             }
                         } label: {
-                            Text("\(displayModeSelection.capitalized) · \(Int(zoom * 100))%")
+                            Label((MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).title, systemImage: (MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).symbol)
                                 .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
                                 .foregroundStyle(Theme.accent)
                                 .padding(.horizontal, 12).padding(.vertical, 10)
@@ -1508,12 +1523,20 @@ private struct FullscreenMirrorView: View {
                         Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
                         Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom out")
+                        Text("\(Int(zoom * 100))%").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).frame(minWidth: 42)
+                            .accessibilityLabel("Mirror zoom \(Int(zoom * 100)) percent")
                         Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom in")
                         Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
                         Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: { Label(keepAwake ? "Keep Awake" : "Allow Sleep", systemImage: keepAwake ? "sun.max.fill" : "moon.zzz") }
-                        Button { controlsVisible = false } label: { Image(systemName: "eye.slash").font(.system(size: 18, weight: .semibold)) }
-                            .accessibilityLabel("Hide mirror controls")
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = false }
+                            revealControlsButton()
+                        } label: {
+                            Image(systemName: "eye.slash").font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .accessibilityLabel("Hide mirror controls")
                     }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.accent)
@@ -1523,19 +1546,27 @@ private struct FullscreenMirrorView: View {
                     .padding(.bottom, 18)
                 }
                 .transition(.opacity)
-            } else {
+            } else if showControlsButton || !controlsAutoHideEnabled {
                 VStack {
                     HStack {
                         Spacer()
-                        Button { withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true } } label: {
-                            Image(systemName: "eye").font(.system(size: 13, weight: .bold))
-                                .frame(width: 36, height: 36).background(.black.opacity(0.72), in: Circle())
+                        Button {
+                            controlsButtonHideTask?.cancel()
+                            withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
+                            showControlsButton = false
+                        } label: {
+                            Image(systemName: "eye").font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 38, height: 38)
+                                .background(Theme.background.opacity(0.97), in: Circle())
+                                .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Show mirror controls")
                     }
                     Spacer()
                 }
                 .padding(12)
+                .transition(.opacity)
             }
         }
         .foregroundStyle(.white)
@@ -1547,11 +1578,34 @@ private struct FullscreenMirrorView: View {
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = keepAwake }
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { if !controlsVisible { revealControlsButton() } })
+        .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in if !controlsVisible { revealControlsButton() } })
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = keepAwake
+            if !controlsVisible { revealControlsButton() }
+        }
+        .onChange(of: controlsAutoHideEnabled) { enabled in
+            if enabled && !controlsVisible { revealControlsButton() }
+            else { controlsButtonHideTask?.cancel(); showControlsButton = !enabled && !controlsVisible }
+        }
+        .onChange(of: controlsAutoHideSeconds) { _ in if showControlsButton { revealControlsButton() } }
         .onChange(of: keepAwake) { newValue in UIApplication.shared.isIdleTimerDisabled = newValue }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear { controlsButtonHideTask?.cancel(); UIApplication.shared.isIdleTimerDisabled = false }
     }
 
+    private func revealControlsButton() {
+        controlsButtonHideTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.15)) { showControlsButton = true }
+        guard controlsAutoHideEnabled else { return }
+        controlsButtonHideTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(max(1, controlsAutoHideSeconds)) * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.15)) { showControlsButton = false }
+            }
+        }
+    }
 }
 
 private struct ConnectionSettingsScreen: View {
@@ -1563,6 +1617,8 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
     @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 5
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
 
@@ -1739,6 +1795,27 @@ private struct ConnectionSettingsScreen: View {
                                     .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.background)
                                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                    }
+
+                    PocketCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Full-screen mirror controls auto-hide", systemImage: "eye.slash")
+                                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                            Text("When the controls are hidden, show the eye button briefly after a touch or drag.")
+                                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                            Toggle("Hide the show-controls button automatically", isOn: $mirrorControlsAutoHideEnabled)
+                                .font(.system(size: 13, weight: .medium)).tint(Theme.accent)
+                            if mirrorControlsAutoHideEnabled {
+                                Picker("Hide after", selection: $mirrorControlsAutoHideSeconds) {
+                                    Text("3 seconds").tag(3)
+                                    Text("5 seconds").tag(5)
+                                    Text("10 seconds").tag(10)
+                                    Text("15 seconds").tag(15)
+                                    Text("30 seconds").tag(30)
+                                }
+                                .tint(Theme.accent)
                             }
                         }
                     }
