@@ -109,9 +109,13 @@ struct ContentView: View {
             bottomNavigation
                 .frame(height: footerVisible ? 64 : 0, alignment: .top)
                 .opacity(footerVisible ? 1 : 0)
-                .clipped()
                 .allowsHitTesting(footerVisible)
                 .accessibilityHidden(!footerVisible)
+                .background {
+                    if footerVisible {
+                        Theme.background.ignoresSafeArea(edges: .bottom)
+                    }
+                }
                 .animation(.easeInOut(duration: 0.2), value: footerVisible)
         }
         .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
