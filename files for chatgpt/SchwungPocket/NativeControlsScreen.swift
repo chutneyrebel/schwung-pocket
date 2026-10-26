@@ -40,7 +40,7 @@ struct NativeControlsScreen: View {
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
-    @State private var midiLogRows: [String] = []
+    @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
     var body: some View {
         ModuleScreenShell(
@@ -61,14 +61,7 @@ struct NativeControlsScreen: View {
                 slotSettingsCard
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .schwungMirrorMIDIEvent)) { notification in
-            guard let label = notification.userInfo?["label"] as? String,
-                  let action = notification.userInfo?["action"] as? String else { return }
-            let row = "\(label)  \(action)"
-            if midiLogRows.first != row { midiLogRows.insert(row, at: 0) }
-            midiLogRows = Array(midiLogRows.prefix(5))
-        }
-        .onAppear {
+         .onAppear {
             remote.loadSlotModules(address: device.addressText)
             // The WebSocket subscribes to all four mixer slots when it connects.
             // Keep those live subscriptions and cached M/S states when returning
@@ -178,26 +171,26 @@ struct NativeControlsScreen: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(midiLogRows.isEmpty ? Theme.muted : Color(red: 1.0, green: 0.82, blue: 0.36))
+                        .fill(midiActivity.events.isEmpty ? Theme.muted : Color(red: 1.0, green: 0.82, blue: 0.36))
                         .frame(width: 7, height: 7)
                     Text("LIVE MOVE NOTE / CC LOG")
                         .font(.system(size: 10, weight: .heavy))
                         .tracking(1.3)
                         .foregroundStyle(Theme.muted)
                     Spacer()
-                    if !midiLogRows.isEmpty {
+                    if !midiActivity.events.isEmpty {
                         Text("LIVE")
                             .font(.system(size: 9, weight: .heavy))
                             .foregroundStyle(Theme.success)
                     }
                 }
-                if midiLogRows.isEmpty {
+                if midiActivity.events.isEmpty {
                     Text("Use a pad or control on Move to see recent note and CC events from the Mirror log.")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    ForEach(Array(midiLogRows.enumerated()), id: \\.offset) { _, event in
+                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
                         Text(event)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(Color.white)
