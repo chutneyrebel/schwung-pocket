@@ -133,7 +133,8 @@ struct ManagerWebView: UIViewRepresentable {
                 html, body { width:100% !important; min-width:0 !important; max-width:100% !important; margin:0 !important; }
                 body { box-sizing:border-box !important; }
                 ${fit ? 'overflow-x:hidden !important;' : ''}
-                canvas, img, video, svg { max-width:100% !important; max-height:100dvh !important; object-fit:contain !important; }\n                @media (orientation: landscape) { body { padding:0 !important; } header, nav { max-height:0 !important; overflow:hidden !important; } }
+                canvas, img, video, svg { max-width:100% !important; max-height:100dvh !important; object-fit:contain !important; }
+                @media (orientation: landscape) { body { padding:0 !important; } header, nav { max-height:0 !important; overflow:hidden !important; } }
               `;
               if (fit) {
                 let viewport = document.querySelector('meta[name="viewport"]');
@@ -188,7 +189,7 @@ struct ManagerWebView: UIViewRepresentable {
                 if (!candidate.dataset.spMirrorCaptureToolbar) candidate.dataset.spMirrorCaptureToolbar = candidate.style.display || '__default__';
                 candidate.style.display = 'none';
               }
-              window.__spApplyMirrorLayout = () => {\n              roots.forEach((el, i) => {
+              roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
                 el.style.display = show ? (original === '__default__' ? '' : original) : 'none';
@@ -198,7 +199,7 @@ struct ManagerWebView: UIViewRepresentable {
                   if (mode !== 'both') { el.style.width = '100vw'; el.style.height = '100dvh'; el.style.objectFit = 'contain'; }
                 }
               });
-              document.documentElement.style.width = '100%'; document.body.style.width = '100%';\n              };\n              window.__spApplyMirrorLayout();
+              document.documentElement.style.width = '100%'; document.body.style.width = '100%';
               window.__spApplyMirrorLayout = () => {
                 const current = (window.__spMirrorRoots || []).filter(el => el && el.isConnected);
                 // Restore original visibility before measuring. Otherwise a previously hidden
