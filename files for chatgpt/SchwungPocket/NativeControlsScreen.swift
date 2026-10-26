@@ -223,7 +223,8 @@ struct NativeControlsScreen: View {
               let baseComponents = URLComponents(url: baseURL, resolvingAgainstBaseURL: false),
               let scheme = baseComponents.scheme,
               let host = baseComponents.host else { return nil }
-        guard var target = URLComponents(string: raw, resolvingAgainstBaseURL: false) else { return nil }
+        guard let rawURL = URL(string: raw),
+              var target = URLComponents(url: rawURL, resolvingAgainstBaseURL: false) else { return nil }
         if target.scheme == nil {
             target = URLComponents(url: URL(string: raw, relativeTo: baseURL)?.absoluteURL ?? baseURL,
                                    resolvingAgainstBaseURL: false) ?? target
