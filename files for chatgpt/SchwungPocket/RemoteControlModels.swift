@@ -114,6 +114,8 @@ struct RemoteParameter: Identifiable, Hashable {
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
         case "filepath", "canvas":
             return .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
+        case "tool_read_only":
+            return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")
         default:
             return .readOnly(reason: "Unsupported control type “\(type)”.")
         }
