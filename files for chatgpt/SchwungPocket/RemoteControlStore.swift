@@ -493,7 +493,13 @@ final class RemoteControlStore: ObservableObject {
                                     module.dsp_path.map { (module.id, $0) }
                                 }, uniquingKeysWith: { first, _ in first })
                                 catalogue = catalogue.map { module in
-                                    guard module.dsp_path?.isEmpty != false, let path = paths[module.id] else { return module }
+                                    guard module.dsp_path?.isEmpty != false else { return module }
+                                    let path = paths[module.id]
+                                        ?? slotModules.first(where: {
+                                            $0.name.caseInsensitiveCompare(module.name) == .orderedSame
+                                                && $0.component_type == module.component_type
+                                        })?.dsp_path
+                                    guard let path, !path.isEmpty else { return module }
                                     return RemoteSlotModule(
                                         id: module.id,
                                         name: module.name,
@@ -662,6 +668,10 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func clearComponentPresentation(_ component: String) {
+        // Remove the old module label as well as its controls immediately.
+        // Otherwise the selected Master FX custom panel can remain visible
+        // while Schwung processes the unload/swap request.
+        componentNames.removeValue(forKey: component)
         parameters.removeAll { $0.component == component }
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
