@@ -2,6 +2,9 @@ name: Compile iOS app in cloud
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - v0.8.3-development
   pull_request:
     branches: [main]
 
