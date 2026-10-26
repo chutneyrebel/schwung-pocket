@@ -34,6 +34,8 @@ enum RemoteDestination: String, CaseIterable, Identifiable, Hashable {
 enum RemoteWireTarget: Equatable {
     /// Addressed through the `slot` field of the observed Remote UI messages.
     case slot(Int)
+    case masterFX
+    case tool
     /// No verified protocol exists in this codebase. No messages may be sent.
     case unverified(reason: String)
 }
@@ -41,8 +43,7 @@ enum RemoteWireTarget: Equatable {
 /// Single place that maps UI destinations to protocol addressing.
 ///
 /// Verified against on-device tests: UI Slots 1-4 map to wire slot values 0-3.
-/// Master FX and Tool remain unverified: no observed Remote UI addressing exists for them, so no
-/// messages are sent to those destinations until the Manager's actual traffic is captured.
+/// Master FX and Tool use dedicated message types implemented by Schwung Manager.
 enum RemoteProtocolAdapter {
     static let slotWireOffset = -1
 
@@ -52,10 +53,8 @@ enum RemoteProtocolAdapter {
         case .slot2: return .slot(2 + slotWireOffset)
         case .slot3: return .slot(3 + slotWireOffset)
         case .slot4: return .slot(4 + slotWireOffset)
-        case .masterFX:
-            return .unverified(reason: "Master FX control over the Remote UI hasn't been verified yet, so Schwung Pocket sends nothing for it. Capture the Manager's WebSocket traffic for Master FX to enable it.")
-        case .tool:
-            return .unverified(reason: "Tool control over the Remote UI hasn't been verified yet, so Schwung Pocket sends nothing for it. Capture the Manager's WebSocket traffic for a Tool to enable it.")
+        case .masterFX: return .masterFX
+        case .tool: return .tool
         }
     }
 }
