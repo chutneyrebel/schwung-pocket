@@ -64,6 +64,7 @@ final class RemoteControlStore: ObservableObject {
     private var retryTask: Task<Void, Never>?
     private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
+    private var toolRefreshTask: Task<Void, Never>?
     private var connectionGeneration = 0
     private var selectionGeneration = 0
     private var retryAttempt = 0
@@ -174,6 +175,7 @@ final class RemoteControlStore: ObservableObject {
         retryAttempt = 0
         retryTask?.cancel()
         openSocket(isRetry: false)
+        if case .tool = wireTarget { startToolRefreshLoop() }
     }
 
     func disconnect() {
@@ -181,6 +183,8 @@ final class RemoteControlStore: ObservableObject {
         resumeAfterBackground = false
         retryTask?.cancel()
         retryTask = nil
+        toolRefreshTask?.cancel()
+        toolRefreshTask = nil
         loadTimeoutTask?.cancel()
         tearDownSocket()
         connection = .disconnected
@@ -325,6 +329,10 @@ final class RemoteControlStore: ObservableObject {
         // Release the global Master FX / Tool subscriptions when leaving them;
         // slot subscriptions stay active because the mixer tiles need live state
         // for all four slots, including the non-selected ones.
+        if case .tool = wireTarget {
+            toolRefreshTask?.cancel()
+            toolRefreshTask = nil
+        }
         if isConnected {
             switch wireTarget {
             case .masterFX:
@@ -347,6 +355,24 @@ final class RemoteControlStore: ObservableObject {
             if isConnected { beginLoading(); send(["type": "subscribe_master_fx"]) } else { loadState = .idle }
         case .tool:
             if isConnected { beginLoading(); send(["type": "subscribe_tool"]) } else { loadState = .idle }
+            startToolRefreshLoop()
+        }
+    }
+
+    /// Schwung's current server announces Tool arrival/removal, but does not
+    /// announce an in-place swap while a Tool remains loaded. Re-subscribing
+    /// only while the Tool destination is visible lets the server report the
+    /// current ID without polling every other screen or adding protocol guesses.
+    private func startToolRefreshLoop() {
+        toolRefreshTask?.cancel()
+        toolRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard let self, !Task.isCancelled, self.destination == .tool else { return }
+                if self.isConnected {
+                    self.send(["type": "subscribe_tool"])
+                }
+            }
         }
     }
 
@@ -872,11 +898,14 @@ final class RemoteControlStore: ObservableObject {
             values = [:]
             lastSent = [:]
         } else if changed {
-            // Clear stale values only when a different Tool arrives. Repeated
-            // tool_info announcements must not erase state already received.
+            // A new Tool can arrive without leaving the Tool destination. Drop
+            // the previous panel URL and state immediately; the matching
+            // custom_ui and param_update messages will repopulate them.
+            customToolUIURL = nil
             parameters = []
             values = [:]
             lastSent = [:]
+            editingKeys.removeAll()
         }
 
         // tool_info confirms that the Tool protocol responded. Its live state
