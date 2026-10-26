@@ -46,6 +46,8 @@ struct NativeControlsScreen: View {
             destinationCard
             if isInstrumentSlot {
                 slotChainCard
+            } else if isMasterFX {
+                masterFXCard
             }
             contentSection
             if isInstrumentSlot {
@@ -85,7 +87,7 @@ struct NativeControlsScreen: View {
                             Label("Connect", systemImage: "dot.radiowaves.left.and.right").font(.system(size: 13, weight: .bold))
                         }.buttonStyle(StudioPrimaryButton())
                     }
-                    if remote.isConnected, case .slot = remote.wireTarget {
+                    if remote.isConnected {
                         Button { remote.refresh() } label: {
                             Label("Reload", systemImage: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
                         }.buttonStyle(StudioSecondaryButton())
@@ -114,7 +116,7 @@ struct NativeControlsScreen: View {
         PocketCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("SLOT & INSTRUMENT").font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(Theme.muted)
+                    Text("REMOTE DESTINATION").font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(Theme.muted)
                     Spacer()
                     Text(remote.instrumentName.isEmpty ? " " : remote.instrumentName)
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent).lineLimit(1)
@@ -202,12 +204,67 @@ struct NativeControlsScreen: View {
     }
 
     private var selectedComponentParameters: [RemoteParameter] {
+        if isMasterFX {
+            return remote.parameters
+                .filter { $0.component == remote.selectedMasterFXComponent }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        }
+        if isTool {
+            return remote.parameters.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        }
         if selectedChainComponent == .instrument {
             return remote.visibleParameters.filter { $0.component == selectedChainComponent.rawValue }
         }
         return remote.parameters
             .filter { $0.component == selectedChainComponent.rawValue }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    // MARK: Master FX
+
+    private var masterFXCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("MASTER FX CHAIN")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.muted)
+                Text("Select a loaded master-bus effect to inspect its live parameters.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
+                    ForEach(1...8, id: \.self) { index in
+                        let key = "master_fx:fx\(index)"
+                        let moduleName = remote.componentNames[key]
+                        let selected = remote.selectedMasterFXComponent == key
+                        Button {
+                            remote.selectedMasterFXComponent = key
+                        } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Master FX \(index)")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(moduleName ?? "Empty slot")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .lineLimit(1)
+                                    .foregroundStyle(selected ? Theme.background.opacity(0.8) : Theme.muted)
+                            }
+                            .foregroundStyle(selected ? Theme.background : Color.white)
+                            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                            .padding(.horizontal, 10)
+                            .background {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(selected ? Theme.accent : Theme.surfaceRaised)
+                            }
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: Slot settings
@@ -311,6 +368,16 @@ struct NativeControlsScreen: View {
         return false
     }
 
+    private var isMasterFX: Bool {
+        if case .masterFX = remote.wireTarget { return true }
+        return false
+    }
+
+    private var isTool: Bool {
+        if case .tool = remote.wireTarget { return true }
+        return false
+    }
+
     private var settingDivider: some View {
         Rectangle().fill(Theme.muted.opacity(0.2)).frame(height: 1)
     }
@@ -345,11 +412,24 @@ struct NativeControlsScreen: View {
                         text: remote.isConnected ? "Pick a destination above." : "Connect to Schwung to load the selected destination.")
         case .loaded:
             if selectedComponentParameters.isEmpty {
-                let loadedName = remote.componentNames[selectedChainComponent.rawValue]
-                let emptyText = loadedName == nil
-                    ? "No \(selectedChainComponent.title.lowercased()) is reported in this slot. Load one in Schwung on Move, then tap Reload."
-                    : "Schwung reported \(loadedName ?? selectedChainComponent.title), but no editable parameters were returned."
-                messageCard(icon: "square.dashed", title: "\(selectedChainComponent.title) has no controls", text: emptyText)
+                if isMasterFX {
+                    let moduleName = remote.componentNames[remote.selectedMasterFXComponent]
+                    let emptyText = moduleName == nil
+                        ? "This Master FX position is empty. Load an effect on Move, then tap Reload."
+                        : "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata for it."
+                    messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
+                } else if isTool {
+                    let emptyText = remote.instrumentName.isEmpty
+                        ? "No overtake Tool is currently loaded. Load a Tool in Schwung on Move, then tap Reload."
+                        : "Tool \(remote.instrumentName) has not reported flat state values. If it has a custom web UI, this native view cannot render that HTML panel yet."
+                    messageCard(icon: "wrench.and.screwdriver", title: "No native Tool controls", text: emptyText)
+                } else {
+                    let loadedName = remote.componentNames[selectedChainComponent.rawValue]
+                    let emptyText = loadedName == nil
+                        ? "No \(selectedChainComponent.title.lowercased()) is reported in this slot. Load one in Schwung on Move, then tap Reload."
+                        : "Schwung reported \(loadedName ?? selectedChainComponent.title), but no editable parameters were returned."
+                    messageCard(icon: "square.dashed", title: "\(selectedChainComponent.title) has no controls", text: emptyText)
+                }
             } else {
                 parameterBank(selectedComponentParameters)
             }
