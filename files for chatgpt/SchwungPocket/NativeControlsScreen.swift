@@ -60,8 +60,10 @@ struct NativeControlsScreen: View {
         }
         .onAppear {
             remote.loadSlotModules(address: device.addressText)
+            // The WebSocket subscribes to all four mixer slots when it connects.
+            // Keep those live subscriptions and cached M/S states when returning
+            // from Mirror instead of sending four duplicate subscribe requests.
             if remote.connection == .disconnected { remote.connect(address: device.addressText) }
-            else { remote.refreshSlotMixStates() }
         }
         // Keep the remote subscription alive when switching between SchwungTroller and Mirror.
         // The scene-phase handler still manages background/foreground recovery.
