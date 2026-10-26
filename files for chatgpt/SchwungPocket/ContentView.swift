@@ -1344,8 +1344,8 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
 
 private struct MirrorScreen: View {
     @ObservedObject var device: MoveConnectionStore
-    @Environment(\\.verticalSizeClass) private var verticalSizeClass
-    let navigationHidden
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    let navigationHidden: Bool
     let navigationAutoHideEnabled: Bool
     @State private var reloadToken = UUID()
     @State private var isFullScreen = false
