@@ -371,40 +371,45 @@ final class RemoteControlStore: ObservableObject {
         isLoadingSlotModules = true
         slotModulesError = nil
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let input = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
-        guard var components = URLComponents(string: input), components.host != nil else {
+        guard let addressURL = URL(string: trimmed.contains("://") ? trimmed : "https://\\(trimmed)"),
+              let host = addressURL.host else {
             isLoadingSlotModules = false
             slotModulesError = "Enter a valid Move address before loading installed modules."
             return
         }
-        components.path = "/api/slot-modules"
-        components.query = nil
-        components.fragment = nil
-        guard let url = components.url else {
-            isLoadingSlotModules = false
-            slotModulesError = "Could not build the installed-module request URL."
-            return
-        }
+        let schemes = addressURL.scheme == "https" ? ["https", "http"] : [addressURL.scheme ?? "http"]
         moduleCatalogTask = Task { [weak self] in
             defer { self?.isLoadingSlotModules = false }
-            do {
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 8
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    throw URLError(.badServerResponse)
+            var lastError: Error?
+            for scheme in schemes {
+                guard var components = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
+                components.scheme = scheme
+                components.host = host
+                components.path = "/api/slot-modules"
+                components.query = nil
+                components.fragment = nil
+                guard let url = components.url else { continue }
+                do {
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 8
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                        throw URLError(.badServerResponse)
+                    }
+                    let modules = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
+                    guard !Task.isCancelled else { return }
+                    self?.availableSlotModules = modules
+                    self?.slotModulesError = modules.isEmpty ? "Schwung returned no installed modules for this device." : nil
+                    RemoteDiagnostics.log("slot module catalogue loaded from \\(url.absoluteString): \\(modules.count) modules")
+                    return
+                } catch {
+                    lastError = error
+                    RemoteDiagnostics.log("slot module catalogue failed at \\(url.absoluteString): \\(error.localizedDescription)")
                 }
-                let modules = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
-                guard !Task.isCancelled else { return }
-                self?.availableSlotModules = modules
-                if modules.isEmpty {
-                    self?.slotModulesError = "Schwung returned no installed modules for this device."
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                self?.slotModulesError = "Could not read installed modules from this Schwung build. Update Schwung if /api/slot-modules is unavailable, then try again."
-                RemoteDiagnostics.log("slot module catalogue failed: \(error.localizedDescription)")
             }
+            guard !Task.isCancelled else { return }
+            self?.slotModulesError = "Could not load /api/slot-modules over HTTPS or HTTP. Check that Schwung is updated and that the Move address includes the correct port."
+            if let lastError { RemoteDiagnostics.log("slot module catalogue exhausted fallbacks: \\(lastError.localizedDescription)") }
         }
     }
 
