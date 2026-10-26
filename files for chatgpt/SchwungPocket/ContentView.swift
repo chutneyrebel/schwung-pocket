@@ -3,11 +3,12 @@ import Foundation
 import UIKit
 
 private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
-    case home, modules, mirror, manager, files, settings
+    case home, nativeControls, modules, mirror, manager, files, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .home: return "Home"
+        case .nativeControls: return "SchwungTroller"
         case .modules: return "Modules"
         case .mirror: return "Mirror"
         case .manager: return "Manager"
@@ -18,6 +19,7 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
     var symbol: String {
         switch self {
         case .home: return "waveform.path"
+        case .nativeControls: return "dial.medium"
         case .modules: return "square.grid.2x2.fill"
         case .mirror: return "rectangle.inset.filled"
         case .manager: return "slider.horizontal.3"
@@ -33,7 +35,7 @@ struct ContentView: View {
     @State private var selectedStudioModule: PocketStudioModule?
     @State private var navigationHidden = false
     @State private var navigationHideTask: Task<Void, Never>?
-    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,files,settings"
+    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,nativeControls,modules,mirror,manager,files,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
     @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
 
@@ -42,7 +44,7 @@ struct ContentView: View {
         // Migrate v0.4.2's saved order, which included Vault and had no Modules tab.
         if storedTabOrder.contains("vault") || !saved.contains(.modules) {
             // Migrate older saved orders without dropping the new Files destination.
-            return [.home, .modules, .mirror, .manager, .files, .settings]
+            return [.home, .nativeControls, .modules, .mirror, .manager, .files, .settings]
         }
         // Always keep Settings at the far right, including for users with an older saved tab order.
         let completed = saved + PocketTab.allCases.filter { !saved.contains($0) }
@@ -54,6 +56,8 @@ struct ContentView: View {
         switch tab {
         case .home:
             HomeScreen(device: device, openModules: { selectedTab = .modules }, openStudioModule: { module in selectedStudioModule = module; selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
+        case .nativeControls:
+            NativeControlsScreen(device: device)
         case .modules:
             if let module = selectedStudioModule {
                 VStack(spacing: 0) {
