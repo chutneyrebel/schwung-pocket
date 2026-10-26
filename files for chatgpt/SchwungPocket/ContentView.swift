@@ -1392,41 +1392,49 @@ private struct MirrorScreen: View {
                     InvalidAddressView()
                 }
 
-                HStack(spacing: 0) {
-                    Menu {
-                        ForEach(MirrorDisplayMode.allCases.filter { !$0.rawValue.hasPrefix("slot") }) { mode in
-                            Button { savedMirrorDisplayMode = mode.rawValue } label: {
-                                if mirrorDisplayMode == mode { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
-                            }
-                        }
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: mirrorDisplayMode.symbol).font(.system(size: 17, weight: .semibold))
-                            Text(mirrorDisplayMode.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 46)
-                        .contentShape(Rectangle())
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        Button { audioTrigger = UUID() } label: { Label("Audio", systemImage: "speaker.wave.2.fill").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                            .accessibilityLabel("Toggle mirror audio mute")
+                        Button { recordTrigger = UUID() } label: { Label(isRecording ? "Stop" : "Record", systemImage: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                            .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
                     }
-                    .accessibilityLabel("Choose mirrored display layout")
-                    Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel("Zoom out")
-                    Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, minHeight: 46)
-                    Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel("Zoom in")
-                    Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel("Toggle mirror audio mute")
-                    Button { recordTrigger = UUID() } label: { Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
-                    Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel("Refresh Move mirror")
-                    Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
-                        .accessibilityLabel("Open full-screen mirror")
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 6)
+                    .background(Theme.surfaceRaised)
+                    .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
+                    HStack(spacing: 0) {
+                        Menu {
+                            ForEach(MirrorDisplayMode.allCases.filter { !$0.rawValue.hasPrefix("slot") }) { mode in
+                                Button { savedMirrorDisplayMode = mode.rawValue } label: {
+                                    if mirrorDisplayMode == mode { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
+                                }
+                            }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: mirrorDisplayMode.symbol).font(.system(size: 17, weight: .semibold))
+                                Text(mirrorDisplayMode.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .contentShape(Rectangle())
+                        }
+                        .accessibilityLabel("Choose mirrored display layout")
+                        Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Zoom out")
+                        Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, minHeight: 46)
+                        Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Zoom in")
+                        Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Refresh Move mirror")
+                        Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Open full-screen mirror")
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 6)
+                    .background(Theme.background.opacity(0.98))
+                    .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                 }
-                .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 6)
-                .background(Theme.background.opacity(0.98))
-                .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                 .padding(.bottom, (!navigationHidden || !navigationAutoHideEnabled) ? 62 : 0)
 
             }
