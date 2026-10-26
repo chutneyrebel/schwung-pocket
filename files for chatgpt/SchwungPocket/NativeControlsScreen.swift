@@ -306,9 +306,17 @@ struct NativeControlsScreen: View {
                 }
                 Text(remote.customToolUIURL == nil
                      ? "Schwung has not advertised a custom web panel for this Tool. Reported state values, if available, appear below."
-                     : "Schwung advertised a custom web panel. It should load below.")
+                     : (resolvedToolCustomUIURL == nil
+                        ? "Schwung advertised a custom panel, but its URL could not be resolved safely for this Move address."
+                        : "Schwung advertised a custom web panel. It should load below."))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.muted)
+                if remote.customToolUIURL != nil && resolvedToolCustomUIURL == nil {
+                    Text(remote.customToolUIURL ?? "")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Theme.muted)
+                        .textSelection(.enabled)
+                }
                 if !remote.values.isEmpty {
                     ForEach(remote.values.keys.filter { $0.hasPrefix("overtake_dsp:") }.sorted(), id: \.self) { key in
                         HStack(alignment: .top, spacing: 8) {
