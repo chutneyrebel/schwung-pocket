@@ -267,7 +267,9 @@ struct NativeControlsScreen: View {
                         )
                     } label: {
                         Label(
-                            remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Disable",
+                            !remote.hasComponentBypassState(selectedChainComponent.rawValue)
+                                ? "Bypass"
+                                : (remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Disable"),
                             systemImage: remote.isComponentBypassed(selectedChainComponent.rawValue) ? "play.fill" : "pause.fill"
                         )
                         .font(.system(size: 11, weight: .bold))
@@ -537,7 +539,9 @@ struct NativeControlsScreen: View {
                         )
                     } label: {
                         Label(
-                            remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "Enable" : "Disable",
+                            !remote.hasComponentBypassState(remote.selectedMasterFXComponent)
+                                ? "Bypass"
+                                : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "Enable" : "Disable"),
                             systemImage: remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "play.fill" : "pause.fill"
                         )
                         .font(.system(size: 11, weight: .bold))
