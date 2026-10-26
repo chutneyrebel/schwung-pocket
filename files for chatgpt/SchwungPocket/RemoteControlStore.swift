@@ -661,17 +661,64 @@ final class RemoteControlStore: ObservableObject {
             slotModulesError = "That effect is not available for Master FX or must be loaded directly on the Move."
             return
         }
-        guard let dspPath = module.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !dspPath.isEmpty else {
-            slotModulesError = "Schwung did not provide a DSP path for \(module.name). Refresh the module directory or load this effect directly on the Move."
-            RemoteDiagnostics.log("Master FX swap blocked: no dsp_path for module=\(module.id)")
+        if let dspPath = module.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !dspPath.isEmpty {
+            sendMasterFXLoad(module: module, component: component, dspPath: dspPath)
             return
         }
+
+        // The broad catalogue can omit dsp_path even though Schwung's installed
+        // module endpoint has it. Resolve the selected effect directly at tap
+        // time instead of making the user refresh the same incomplete catalogue.
+        RemoteDiagnostics.log("Master FX swap missing cached DSP path; querying installed list for module=\(module.id)")
+        Task { [weak self] in
+            guard let self else { return }
+            guard let addressURL = URL(string: self.address.contains("://") ? self.address : "https://\(self.address)"),
+                  let host = addressURL.host else {
+                self.slotModulesError = "Could not read the Move address. Check Settings and retry."
+                return
+            }
+            let originalScheme = (addressURL.scheme ?? "https").lowercased()
+            let schemes = originalScheme == "https" ? ["https", "http"] : [originalScheme]
+            for scheme in schemes {
+                guard var parts = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
+                parts.scheme = scheme
+                parts.host = host
+                parts.path = "/api/slot-modules"
+                parts.query = nil
+                parts.fragment = nil
+                guard let url = parts.url else { continue }
+                do {
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 5
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
+                    guard let installed = try? JSONDecoder().decode([RemoteSlotModule].self, from: data) else { continue }
+                    let match = installed.first(where: { $0.id == module.id && $0.componentType == "audio_fx" })
+                        ?? installed.first(where: {
+                            $0.name.caseInsensitiveCompare(module.name) == .orderedSame
+                                && $0.componentType == "audio_fx"
+                        })
+                    if let path = match?.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+                        guard self.isConnected, case .masterFX = self.wireTarget else { return }
+                        self.sendMasterFXLoad(module: module, component: component, dspPath: path)
+                        return
+                    }
+                } catch {
+                    RemoteDiagnostics.log("Master FX direct DSP lookup failed on \(scheme): \(error.localizedDescription)")
+                }
+            }
+            self.slotModulesError = "Schwung's installed-module list did not return a DSP path for \(module.name)."
+            RemoteDiagnostics.log("Master FX swap failed: installed list has no DSP path for module=\(module.id)")
+        }
+    }
+
+    private func sendMasterFXLoad(module: RemoteSlotModule, component: String, dspPath: String) {
         slotModulesError = nil
         clearComponentPresentation(component)
         beginLoading()
+        RemoteDiagnostics.log("Sending Master FX load: component=\(component) module=\(module.id) dsp_path=\(dspPath)")
         send(["type": "set_master_fx_param", "key": "\(component):module", "value": dspPath])
-        RemoteDiagnostics.log("Requested Master FX swap: component=\(component) module=\(module.id)")
         refreshMasterFXAfterModuleAction()
     }
 
@@ -952,6 +999,11 @@ final class RemoteControlStore: ObservableObject {
         if type == "error" {
             let messageText = message["message"] as? String ?? "Schwung Manager returned an error."
             RemoteDiagnostics.log("server error: \(messageText)")
+            if case .masterFX = wireTarget {
+                // Keep server-side load/unload refusals visible instead of
+                // allowing the subsequent listing refresh to hide the failure.
+                slotModulesError = messageText
+            }
             if loadState == .loading { loadState = .error(messageText) }
             return
         }
