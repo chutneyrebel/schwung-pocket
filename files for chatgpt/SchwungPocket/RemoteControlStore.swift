@@ -34,6 +34,8 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var destination: RemoteDestination = .slot1
     @Published private(set) var instrumentName = ""
     @Published private(set) var componentNames: [String: String] = [:]
+    @Published private(set) var midiFXCapacity = 1
+    @Published private(set) var audioFXCapacity = 2
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -325,6 +327,8 @@ final class RemoteControlStore: ObservableObject {
         loadTimeoutTask?.cancel()
         instrumentName = ""
         componentNames = [:]
+        midiFXCapacity = 1
+        audioFXCapacity = 2
         parameters = []
         levels = []
         values = [:]
@@ -594,26 +598,87 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func handleSlotInfo(_ message: [String: Any]) {
+        let unknownSections = Set(message["unknown"] as? [String] ?? [])
+        let synthKnown = !unknownSections.contains("synth")
         let newName = message["synth"] as? String ?? ""
-        let hasAnyComponent = ["synth", "fx1", "fx2", "midi_fx1"].contains { !((message[$0] as? String) ?? "").isEmpty }
-        RemoteDiagnostics.log("slot_info synth=\(newName)")
-        if !instrumentName.isEmpty, newName != instrumentName, case .slot(let slot) = wireTarget {
-            // Instrument was swapped on the device: old metadata is no longer valid.
+        RemoteDiagnostics.log("slot_info synth=\(synthKnown ? newName : "unknown")")
+
+        if synthKnown, !instrumentName.isEmpty, newName != instrumentName, case .slot(let slot) = wireTarget {
+            // Instrument was swapped on the device: old instrument metadata is no longer valid.
             let keepName = newName
             clearPresentedData()
             instrumentName = keepName
             subscribe(slot: slot)
             return
         }
-        instrumentName = newName
-        var names: [String: String] = [:]
-        for component in ["midi_fx1", "synth", "fx1", "fx2"] {
-            if let name = message[component] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                names[component] = name
+        if synthKnown { instrumentName = newName }
+
+        var names = componentNames
+        if synthKnown {
+            names.removeValue(forKey: "synth")
+            if !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                names["synth"] = newName
             }
         }
+
+        // Newer Schwung versions provide positional lists and capacities. Older
+        // versions provide only fx1/fx2/midi_fx1, so retain that wire fallback.
+        if !unknownSections.contains("midi_fx") {
+            if let modules = message["midi_fx"] as? [String] {
+                names = names.filter { !$0.key.hasPrefix("midi_fx") }
+                for (index, rawName) in modules.enumerated() {
+                    let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { names["midi_fx\(index + 1)"] = name }
+                }
+                if let cap = message["midi_fx_cap"] as? Int {
+                    midiFXCapacity = min(max(cap, 1), 8)
+                } else {
+                    midiFXCapacity = max(modules.count, 1)
+                }
+            } else {
+                if let rawName = message["midi_fx1"] as? String {
+                    names.removeValue(forKey: "midi_fx1")
+                    let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { names["midi_fx1"] = name }
+                }
+                midiFXCapacity = min(max(message["midi_fx_cap"] as? Int ?? 1, 1), 8)
+            }
+        } else if let cap = message["midi_fx_cap"] as? Int {
+            midiFXCapacity = min(max(cap, 1), 8)
+        }
+
+        if !unknownSections.contains("fx") {
+            if let modules = message["fx"] as? [String] {
+                names = names.filter { key, _ in !(key.hasPrefix("fx") && Int(key.dropFirst(2)) != nil) }
+                for (index, rawName) in modules.enumerated() {
+                    let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { names["fx\(index + 1)"] = name }
+                }
+                if let cap = message["fx_cap"] as? Int {
+                    audioFXCapacity = min(max(cap, 1), 8)
+                } else {
+                    audioFXCapacity = max(modules.count, 2)
+                }
+            } else {
+                for component in ["fx1", "fx2"] {
+                    if let rawName = message[component] as? String {
+                        names.removeValue(forKey: component)
+                        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !name.isEmpty { names[component] = name }
+                    }
+                }
+                audioFXCapacity = min(max(message["fx_cap"] as? Int ?? 2, 2), 8)
+            }
+        } else if let cap = message["fx_cap"] as? Int {
+            audioFXCapacity = min(max(cap, 1), 8)
+        }
+
         componentNames = names
-        if !hasAnyComponent { loadState = .loaded; loadTimeoutTask?.cancel() }
+        let allSectionsKnown = synthKnown && !unknownSections.contains("midi_fx") && !unknownSections.contains("fx")
+        if allSectionsKnown && names.isEmpty {
+            loadState = .loaded
+            loadTimeoutTask?.cancel()
+        }
     }
 
     private func handleHierarchy(_ message: [String: Any]) {
