@@ -242,10 +242,18 @@ final class RemoteControlStore: ObservableObject {
                 }
                 beginLoading()
             case .masterFX:
+                for subscribedSlot in 0...3 {
+                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
+                    guard generation == connectionGeneration else { return }
+                }
                 try await task.send(.string(Self.jsonString(["type": "subscribe_master_fx"])))
                 guard generation == connectionGeneration else { return }
                 beginLoading()
             case .tool:
+                for subscribedSlot in 0...3 {
+                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
+                    guard generation == connectionGeneration else { return }
+                }
                 try await task.send(.string(Self.jsonString(["type": "subscribe_tool"])))
                 guard generation == connectionGeneration else { return }
                 beginLoading()
@@ -628,6 +636,11 @@ final class RemoteControlStore: ObservableObject {
             RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
             return
         }
+        if type == "param_update",
+           let slot = message["slot"] as? Int,
+           (0...3).contains(slot) {
+            updateSlotMixState(slot: slot, params: message["params"] as? [String: Any] ?? [:])
+        }
         if type == "error" {
             let messageText = message["message"] as? String ?? "Schwung Manager returned an error."
             RemoteDiagnostics.log("server error: \(messageText)")
@@ -637,11 +650,6 @@ final class RemoteControlStore: ObservableObject {
 
         switch wireTarget {
         case .slot(let currentSlot):
-            if type == "param_update",
-               let messageSlot = message["slot"] as? Int,
-               (0...3).contains(messageSlot) {
-                updateSlotMixState(slot: messageSlot, params: message["params"] as? [String: Any] ?? [:])
-            }
             guard let messageSlot = message["slot"] as? Int, messageSlot == currentSlot else {
                 RemoteDiagnostics.log("ignored \(type) not addressed to current slot")
                 return
