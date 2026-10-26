@@ -38,6 +38,7 @@ struct NativeControlsScreen: View {
     @AppStorage(RemoteDiagnostics.defaultsKey) private var diagnosticsEnabled = false
     @State private var copiedReport = false
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
+    @State private var showingModulePicker = false
 
     var body: some View {
         ModuleScreenShell(
@@ -58,12 +59,16 @@ struct NativeControlsScreen: View {
             }
         }
         .onAppear {
+            remote.loadSlotModules(address: device.addressText)
             if remote.connection == .disconnected { remote.connect(address: device.addressText) }
         }
         .onDisappear { remote.disconnect() }
         .onChange(of: scenePhase) { phase in
             if phase == .active { remote.appDidBecomeActive() }
             else if phase == .background { remote.appDidEnterBackground() }
+        }
+        .sheet(isPresented: $showingModulePicker) {
+            ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent)
         }
     }
 
@@ -157,9 +162,21 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.4)
                     .foregroundStyle(Theme.muted)
-                Text("MIDI FX → Instrument → Audio FX")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.muted)
+                HStack(alignment: .center, spacing: 10) {
+                    Text("MIDI FX → Instrument → Audio FX")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    Button {
+                        remote.loadSlotModules(address: device.addressText)
+                        showingModulePicker = true
+                    } label: {
+                        Label("Swap", systemImage: "arrow.left.arrow.right")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected)
+                }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(chainComponents) { component in
                         let selected = selectedChainComponent == component
@@ -265,6 +282,49 @@ struct NativeControlsScreen: View {
         return remote.parameters
             .filter { $0.component == selectedChainComponent.rawValue }
             .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var toolInfoCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .foregroundStyle(Theme.accent)
+                    Text(remote.instrumentName.isEmpty ? "Tool subscription active" : remote.instrumentName)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(remote.customToolUIURL == nil ? "STATE" : "WEB UI")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(1)
+                        .foregroundStyle(Theme.accent)
+                }
+                Text(remote.customToolUIURL == nil
+                     ? "Schwung has not advertised a custom web panel for this Tool. Reported state values, if available, appear below."
+                     : "Schwung advertised a custom web panel. It should load below.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                if !remote.values.isEmpty {
+                    ForEach(remote.values.keys.filter { $0.hasPrefix("overtake_dsp:") }.sorted(), id: \.self) { key in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(String(key.dropFirst("overtake_dsp:".count)).replacingOccurrences(of: "_", with: " "))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Theme.muted)
+                            Spacer(minLength: 8)
+                            Text(remote.values[key] ?? "")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .lineLimit(3)
+                                .textSelection(.enabled)
+                        }
+                    }
+                } else {
+                    Text("No flat Tool state values have arrived yet.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+        }
     }
 
     // MARK: Master FX
@@ -458,6 +518,7 @@ struct NativeControlsScreen: View {
             messageCard(icon: "waveform.path.ecg", title: "Ready to discover controls",
                         text: remote.isConnected ? "Pick a destination above." : "Connect to Schwung to load the selected destination.")
         case .loaded:
+            if isTool { toolInfoCard }
             if let customURL = resolvedToolCustomUIURL { toolCustomUICard(customURL) }
             if selectedComponentParameters.isEmpty {
                 if isMasterFX {
@@ -644,6 +705,95 @@ struct DestinationSelector: View {
                 }
             }
         }
+    }
+}
+
+private struct ModuleSwapSheet: View {
+    @ObservedObject var remote: RemoteControlStore
+    let address: String
+    let component: SchwungChainComponent
+    @Environment(\.dismiss) private var dismiss
+    @State private var pendingModule: RemoteSlotModule?
+
+    private var expectedType: String {
+        if component.rawValue == "synth" { return "sound_generator" }
+        if component.rawValue.hasPrefix("midi_fx") { return "midi_fx" }
+        return "audio_fx"
+    }
+
+    private var choices: [RemoteSlotModule] {
+        remote.availableSlotModules
+            .filter { $0.componentType == expectedType && !$0.deviceOnly }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section {
+                    Text("Choose an installed module for \(component.title). The selected position will be replaced on the Move.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                if remote.isLoadingSlotModules {
+                    HStack { ProgressView(); Text("Reading installed modules…") }
+                }
+                if let error = remote.slotModulesError {
+                    Section {
+                        Text(error).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Button("Retry module discovery") { remote.loadSlotModules(address: address) }
+                    }
+                }
+                Section("Installed \(component.title) modules") {
+                    if choices.isEmpty {
+                        Text("No compatible modules found. Check that Schwung supports /api/slot-modules and try again.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(choices) { module in
+                        Button {
+                            pendingModule = module
+                        } label: {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(module.name).foregroundStyle(.primary)
+                                Text(module.id).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Swap \(component.title)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Refresh") { remote.loadSlotModules(address: address) }
+                        .disabled(remote.isLoadingSlotModules)
+                }
+            }
+            .confirmationDialog(
+                "Replace \(component.title)?",
+                isPresented: Binding(
+                    get: { pendingModule != nil },
+                    set: { if !$0 { pendingModule = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let module = pendingModule {
+                    Button("Replace with \(module.name)", role: .destructive) {
+                        remote.swapModule(component: component.rawValue, moduleID: module.id)
+                        pendingModule = nil
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingModule = nil }
+            } message: {
+                Text("This replaces the module currently loaded in this chain position.")
+            }
+        }
+        .onAppear { remote.loadSlotModules(address: address) }
     }
 }
 
