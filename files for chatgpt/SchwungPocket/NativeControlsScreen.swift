@@ -1,29 +1,31 @@
 import SwiftUI
 import UIKit
 
-private enum SchwungChainComponent: String, CaseIterable, Identifiable {
-    case midiFX = "midi_fx1"
-    case instrument = "synth"
-    case audioFX1 = "fx1"
-    case audioFX2 = "fx2"
+private struct SchwungChainComponent: Identifiable, Hashable {
+    let rawValue: String
+    let title: String
+    let symbol: String
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .midiFX: return "MIDI FX"
-        case .instrument: return "Instrument"
-        case .audioFX1: return "Audio FX 1"
-        case .audioFX2: return "Audio FX 2"
-        }
+    static let instrument = SchwungChainComponent(
+        rawValue: "synth", title: "Instrument", symbol: "waveform"
+    )
+
+    static func midiFX(_ position: Int) -> SchwungChainComponent {
+        SchwungChainComponent(
+            rawValue: "midi_fx\(position)",
+            title: "MIDI FX \(position)",
+            symbol: "pianokeys"
+        )
     }
 
-    var symbol: String {
-        switch self {
-        case .midiFX: return "pianokeys"
-        case .instrument: return "waveform"
-        case .audioFX1, .audioFX2: return "slider.horizontal.3"
-        }
+    static func audioFX(_ position: Int) -> SchwungChainComponent {
+        SchwungChainComponent(
+            rawValue: "fx\(position)",
+            title: "Audio FX \(position)",
+            symbol: "slider.horizontal.3"
+        )
     }
 }
 
@@ -133,6 +135,14 @@ struct NativeControlsScreen: View {
 
     // MARK: Slot signal chain
 
+    /// Positions come from slot_info capacities. Legacy Schwung builds default
+    /// to the original one MIDI FX and two audio FX positions.
+    private var chainComponents: [SchwungChainComponent] {
+        (1...max(remote.midiFXCapacity, 1)).map { .midiFX($0) }
+        + [.instrument]
+        + (1...max(remote.audioFXCapacity, 1)).map { .audioFX($0) }
+    }
+
     private var slotChainCard: some View {
         PocketCard {
             VStack(alignment: .leading, spacing: 10) {
@@ -144,7 +154,7 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.muted)
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
-                    ForEach(SchwungChainComponent.allCases) { component in
+                    ForEach(chainComponents) { component in
                         let selected = selectedChainComponent == component
                         let moduleName = remote.componentNames[component.rawValue]
                         Button {
