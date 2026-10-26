@@ -68,7 +68,11 @@ struct NativeControlsScreen: View {
             else if phase == .background { remote.appDidEnterBackground() }
         }
         .sheet(isPresented: $showingModulePicker) {
-            ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
+            if isMasterFX {
+                ModuleSwapSheet(remote: remote, address: device.addressText, component: nil, masterFXComponent: remote.selectedMasterFXComponent)
+            } else {
+                ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
+            }
         }
     }
 
