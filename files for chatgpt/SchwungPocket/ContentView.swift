@@ -37,7 +37,13 @@ struct ContentView: View {
     @State private var navigationHideTask: Task<Void, Never>?
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,nativeControls,modules,mirror,manager,files,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
-    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 3
+    @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
+
+    private var shouldAutoHideNavigationForSelectedTab: Bool {
+        navigationAutoHideEnabled &&
+        Set(navigationAutoHideTabs.split(separator: ",").map(String.init)).contains(selectedTab.rawValue)
+    }
 
     private var orderedTabs: [PocketTab] {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
@@ -109,7 +115,7 @@ struct ContentView: View {
         }
         .background(Theme.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            let footerVisible = !navigationHidden || !navigationAutoHideEnabled
+            let footerVisible = !navigationHidden || !shouldAutoHideNavigationForSelectedTab
             bottomNavigation
                 .frame(height: footerVisible ? 64 : 0, alignment: .top)
                 .opacity(footerVisible ? 1 : 0)
@@ -122,7 +128,7 @@ struct ContentView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: footerVisible)
         }
-        .simultaneousGesture(TapGesture().onEnded { if selectedTab != .mirror { revealNavigation() } })
+        .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
         .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
         .onAppear { scheduleNavigationHide() }
         .onChange(of: selectedTab) { _ in revealNavigation() }
@@ -134,6 +140,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: navigationAutoHideSeconds) { _ in scheduleNavigationHide() }
+        .onChange(of: navigationAutoHideTabs) { _ in scheduleNavigationHide() }
         .onDisappear { navigationHideTask?.cancel() }
     }
 
@@ -177,14 +184,14 @@ struct ContentView: View {
 
     private func scheduleNavigationHide() {
         navigationHideTask?.cancel()
-        guard navigationAutoHideEnabled else {
+        guard shouldAutoHideNavigationForSelectedTab else {
             withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
             return
         }
         navigationHideTask = Task { @MainActor in
             let seconds = max(3, min(60, navigationAutoHideSeconds))
             try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, shouldAutoHideNavigationForSelectedTab else { return }
             withAnimation(.easeInOut(duration: 0.2)) { navigationHidden = true }
         }
     }
@@ -1704,7 +1711,8 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.DefaultMoveID.v1") private var defaultMoveID = ""
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
     @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
-    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 5
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 3
+    @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
     @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
     @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 5
     @State private var moveDisplayName = "My Move"
@@ -1919,6 +1927,24 @@ private struct ConnectionSettingsScreen: View {
                                 .font(.system(size: 13, weight: .medium))
                                 .tint(Theme.accent)
                             if navigationAutoHideEnabled {
+                                Text("Choose which pages hide the bottom bar after inactivity.")
+                                    .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                                ForEach(PocketTab.allCases) { tab in
+                                    Toggle(tab.title, isOn: Binding(
+                                        get: { navigationAutoHideTabs.split(separator: ",").contains(Substring(tab.rawValue)) },
+                                        set: { enabled in
+                                            var selected = Set(navigationAutoHideTabs.split(separator: ",").map(String.init))
+                                            if enabled { selected.insert(tab.rawValue) }
+                                            else { selected.remove(tab.rawValue) }
+                                            navigationAutoHideTabs = PocketTab.allCases
+                                                .filter { selected.contains($0.rawValue) }
+                                                .map(\.rawValue)
+                                                .joined(separator: ",")
+                                        }
+                                    ))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .tint(Theme.accent)
+                                }
                                 Picker("Hide after", selection: $navigationAutoHideSeconds) {
                                     Text("3 seconds").tag(3)
                                     Text("5 seconds").tag(5)
