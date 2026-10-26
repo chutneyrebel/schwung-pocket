@@ -732,7 +732,9 @@ final class RemoteControlStore: ObservableObject {
 
     private func handleChainParams(_ message: [String: Any]) {
         guard let component = message["component"] as? String,
-              (["midi_fx1", "synth", "fx1", "fx2"].contains(component) ||
+              (component == "synth" ||
+               component.range(of: #"^midi_fx[1-8]$"#, options: .regularExpression) != nil ||
+               component.range(of: #"^fx[1-8]$"#, options: .regularExpression) != nil ||
                component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil) else {
             // Never silently classify an unlabelled FX response as instrument parameters.
             RemoteDiagnostics.log("chain_params missing or unknown component; ignored")
