@@ -33,6 +33,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var destination: RemoteDestination = .slot1
     @Published private(set) var instrumentName = ""
+    @Published private(set) var componentNames: [String: String] = [:]
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -303,6 +304,7 @@ final class RemoteControlStore: ObservableObject {
         selectionGeneration += 1
         loadTimeoutTask?.cancel()
         instrumentName = ""
+        componentNames = [:]
         parameters = []
         levels = []
         values = [:]
@@ -465,6 +467,13 @@ final class RemoteControlStore: ObservableObject {
             return
         }
         instrumentName = newName
+        var names: [String: String] = [:]
+        for component in ["midi_fx1", "synth", "fx1", "fx2"] {
+            if let name = message[component] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                names[component] = name
+            }
+        }
+        componentNames = names
         if !hasAnyComponent { loadState = .loaded; loadTimeoutTask?.cancel() }
     }
 
