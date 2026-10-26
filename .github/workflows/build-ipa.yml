@@ -235,6 +235,41 @@ jobs:
           echo "Created unsigned IPA package: $IPA"
           /usr/bin/stat -f 'IPA size: %z bytes' "$IPA"
 
+      - name: Generate per-build release notes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES="$GITHUB_WORKSPACE/RELEASE_NOTES.md"
+          if [[ ! -f "$NOTES" ]]; then
+            echo "ERROR: RELEASE_NOTES.md is missing from the development branch." >&2
+            exit 1
+          fi
+          OUT="$GITHUB_WORKSPACE/SchwungPocket-release-notes.md"
+          {
+            echo "# Schwung Pocket — Build Notes"
+            echo
+            echo "- **Branch:** `$GITHUB_REF_NAME`"
+            echo "- **Commit:** `$GITHUB_SHA`"
+            echo "- **Workflow run:** `$GITHUB_RUN_NUMBER` (run ID `$GITHUB_RUN_ID`)"
+            echo "- **Build timestamp (UTC):** `$(date -u '+%Y-%m-%d %H:%M:%S')`"
+            echo "- **Build result:** see the GitHub Actions run status; this document alone does not imply success."
+            echo
+            echo "---"
+            echo
+            cat "$NOTES"
+          } > "$OUT"
+          echo "Generated cumulative release notes: $OUT"
+
+      - name: Upload release notes and regression checklist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchwungPocket-release-notes
+          path: SchwungPocket-release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4
         with:
