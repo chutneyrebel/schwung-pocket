@@ -575,12 +575,18 @@ struct NativeControlsScreen: View {
                         : "Schwung reports \(moduleName ?? "this effect"), but returned no parameter metadata for it."
                     messageCard(icon: "square.dashed", title: "No Master FX controls", text: emptyText)
                 } else if isTool {
-                    let emptyText = remote.instrumentName.isEmpty
-                        ? "No overtake Tool is currently loaded. Load a Tool in Schwung on Move, then tap Reload."
-                        : (remote.customToolUIURL == nil
-                            ? "Tool \(remote.instrumentName) has not reported flat state values and does not advertise a custom web UI."
-                            : "Tool \(remote.instrumentName) has no native state values. Its custom web panel is shown above if the URL is supported.")
-                    messageCard(icon: "wrench.and.screwdriver", title: "No native Tool controls", text: emptyText)
+                    // When a valid custom panel is already rendered above, avoid a
+                    // second empty-state card that misleadingly suggests the Tool
+                    // has no usable controls. Keep the fallback when no panel can
+                    // be loaded, so the user still gets a useful explanation.
+                    if resolvedToolCustomUIURL == nil {
+                        let emptyText = remote.instrumentName.isEmpty
+                            ? "No overtake Tool is currently loaded. Load a Tool in Schwung on Move, then tap Reload."
+                            : (remote.customToolUIURL == nil
+                                ? "Tool \(remote.instrumentName) has not reported flat state values and does not advertise a custom web UI."
+                                : "Tool \(remote.instrumentName) has no native state values, and its advertised custom panel could not be opened.")
+                        messageCard(icon: "wrench.and.screwdriver", title: "No native Tool controls", text: emptyText)
+                    }
                 } else {
                     let loadedName = remote.componentNames[selectedChainComponent.rawValue]
                     let emptyText = loadedName == nil
