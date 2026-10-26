@@ -178,7 +178,7 @@ struct ManagerWebView: UIViewRepresentable {
               // Remove the portal's duplicate status/capture toolbar; native controls are above.
               for (const el of document.querySelectorAll('body *')) {
                 const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-                if (text.length > 520 || !/(screen\\s*\\+\\s*device|screen|device)/i.test(text) || !/save png/i.test(text) || !/log/i.test(text) || !/record/i.test(text)) continue;
+                if (text.length > 520 || !/(screen\s*\+\s*device|screen|device)/i.test(text) || !/save png/i.test(text) || !/log/i.test(text) || !/record/i.test(text)) continue;
                 let candidate = el;
                 for (let depth = 0; depth < 4 && candidate.parentElement; depth++) {
                   const parent = candidate.parentElement;
