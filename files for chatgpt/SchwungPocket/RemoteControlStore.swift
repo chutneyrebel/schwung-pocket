@@ -547,7 +547,7 @@ final class RemoteControlStore: ObservableObject {
     var slotReceiveChannel: String { values["slot:receive_channel"] ?? "0" }
     var slotForwardChannel: String { values["slot:forward_channel"] ?? "-1" }
 
-    func setSlotVolume(_ proposed: Double) {
+    func refreshSlotMixStates() {\n        guard isConnected else { return }\n        for slot in 0...3 { subscribe(to: .slot(slot)) }\n    }\n\n    func setSlotVolume(_ proposed: Double) {
         let stepped = (min(max(proposed, 0), 4) / 0.05).rounded() * 0.05
         setSlotSetting("slot:volume", value: String(format: "%.2f", stepped))
     }
