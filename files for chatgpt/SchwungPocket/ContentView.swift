@@ -1344,7 +1344,8 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
 
 private struct MirrorScreen: View {
     @ObservedObject var device: MoveConnectionStore
-    let navigationHidden: Bool
+    @Environment(\\.verticalSizeClass) private var verticalSizeClass
+    let navigationHidden
     let navigationAutoHideEnabled: Bool
     @State private var reloadToken = UUID()
     @State private var isFullScreen = false
@@ -1397,17 +1398,25 @@ private struct MirrorScreen: View {
                 }
 
                 VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        Button { audioTrigger = UUID() } label: { Label("Audio", systemImage: "speaker.wave.2.fill").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
-                            .accessibilityLabel("Toggle mirror audio mute")
-                        Button { recordTrigger = UUID() } label: { Label(isRecording ? "Stop" : "Record", systemImage: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
-                            .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                    if verticalSizeClass != .compact {
+                        HStack(spacing: 0) {
+                            Button { audioTrigger = UUID() } label: { Label("Audio", systemImage: "speaker.wave.2.fill").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                                .accessibilityLabel("Toggle mirror audio mute")
+                            Button { recordTrigger = UUID() } label: { Label(isRecording ? "Stop" : "Record", systemImage: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                                .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                        }
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 6)
+                        .background(Theme.surfaceRaised)
+                        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                     }
-                    .foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 6)
-                    .background(Theme.surfaceRaised)
-                    .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                     HStack(spacing: 0) {
+                        if verticalSizeClass == .compact {
+                            Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                                .accessibilityLabel("Toggle mirror audio mute")
+                            Button { recordTrigger = UUID() } label: { Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                                .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                        }
                         Menu {
                             ForEach(MirrorDisplayMode.allCases) { mode in
                                 Button {
