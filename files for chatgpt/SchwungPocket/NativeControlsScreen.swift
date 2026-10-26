@@ -768,7 +768,6 @@ struct NativeControlsScreen: View {
         case .loaded:
             if isTool { toolInfoCard }
             if let customURL = resolvedToolCustomUIURL { toolCustomUICard(customURL) }
-            if let customURL = resolvedSelectedMasterFXCustomUIURL { masterFXCustomUICard(customURL) }
             if selectedComponentParameters.isEmpty {
                 if isMasterFX {
                     if resolvedSelectedMasterFXCustomUIURL == nil {
@@ -809,10 +808,6 @@ struct NativeControlsScreen: View {
 
     private func toolCustomUICard(_ url: URL) -> some View {
         customUICard(url, title: "TOOL CUSTOM PANEL")
-    }
-
-    private func masterFXCustomUICard(_ url: URL) -> some View {
-        customUICard(url, title: "MASTER FX CUSTOM PANEL")
     }
 
     private func customUICard(_ url: URL, title: String) -> some View {
