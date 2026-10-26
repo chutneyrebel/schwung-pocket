@@ -168,7 +168,7 @@ struct ManagerWebView: UIViewRepresentable {
               }
               roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
-                const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1) || (mode.startsWith('slot') && i === Number(mode.slice(4)) - 1);
+                const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
                 el.style.display = show ? (original === '__default__' ? '' : original) : 'none';
                 el.style.width = ''; el.style.height = '';
                 if (show && fit) {
