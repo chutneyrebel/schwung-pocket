@@ -44,6 +44,9 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var masterFXCapacity = 4
     @Published private(set) var customToolUIURL: String?
     @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
+    @Published private(set) var availableSlotModules: [RemoteSlotModule] = []
+    @Published private(set) var isLoadingSlotModules = false
+    @Published private(set) var slotModulesError: String?
     @Published private(set) var parameters: [RemoteParameter] = []
     @Published private(set) var levels: [RemoteLevel] = []
     @Published var selectedLevelID = "root"
@@ -56,6 +59,7 @@ final class RemoteControlStore: ObservableObject {
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
+    private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
     private var connectionGeneration = 0
     private var selectionGeneration = 0
@@ -350,6 +354,77 @@ final class RemoteControlStore: ObservableObject {
         selectedLevelID = "root"
         editingKeys.removeAll()
         lastSent.removeAll()
+    }
+
+    // MARK: Installed module discovery and hot-swap
+
+    func loadSlotModules(address: String) {
+        moduleCatalogTask?.cancel()
+        isLoadingSlotModules = true
+        slotModulesError = nil
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let input = trimmed.contains("://") ? trimmed : "http://\\(trimmed)"
+        guard var components = URLComponents(string: input), components.host != nil else {
+            isLoadingSlotModules = false
+            slotModulesError = "Enter a valid Move address before loading installed modules."
+            return
+        }
+        components.path = "/api/slot-modules"
+        components.query = nil
+        components.fragment = nil
+        guard let url = components.url else {
+            isLoadingSlotModules = false
+            slotModulesError = "Could not build the installed-module request URL."
+            return
+        }
+        moduleCatalogTask = Task { [weak self] in
+            defer { self?.isLoadingSlotModules = false }
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 8
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    throw URLError(.badServerResponse)
+                }
+                let modules = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
+                guard !Task.isCancelled else { return }
+                self?.availableSlotModules = modules
+                if modules.isEmpty {
+                    self?.slotModulesError = "Schwung returned no installed modules for this device."
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.slotModulesError = "Could not read installed modules from this Schwung build. Update Schwung if /api/slot-modules is unavailable, then try again."
+                RemoteDiagnostics.log("slot module catalogue failed: \\(error.localizedDescription)")
+            }
+        }
+    }
+
+    func swapModule(component: String, moduleID: String) {
+        guard isConnected, case .slot(let slot) = wireTarget else { return }
+        let expectedType: String
+        if component == "synth" {
+            expectedType = "sound_generator"
+        } else if component.hasPrefix("midi_fx"), Int(component.dropFirst("midi_fx".count)) != nil {
+            expectedType = "midi_fx"
+        } else if component.hasPrefix("fx"), Int(component.dropFirst(2)) != nil {
+            expectedType = "audio_fx"
+        } else {
+            slotModulesError = "This chain position cannot be changed from the app."
+            return
+        }
+        guard let module = availableSlotModules.first(where: { $0.id == moduleID }),
+              module.componentType == expectedType,
+              !module.deviceOnly else {
+            slotModulesError = "That module is unavailable for this chain position or must be loaded directly on the Move."
+            return
+        }
+        parameters.removeAll { $0.component == component }
+        values = values.filter { !$0.key.hasPrefix(component + ":") }
+        lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        beginLoading()
+        send(["type": "set_param", "slot": slot, "key": "\\(component):module", "value": module.id])
+        RemoteDiagnostics.log("Requested module swap: slot=\\(slot) component=\\(component) module=\\(module.id)")
     }
 
     // MARK: Parameter intents
