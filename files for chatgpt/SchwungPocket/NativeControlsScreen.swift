@@ -119,10 +119,10 @@ struct NativeControlsScreen: View {
                     Text(remote.instrumentName.isEmpty ? " " : remote.instrumentName)
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent).lineLimit(1)
                 }
-                DestinationSelector(selection: remote.destination) {
+                DestinationSelector(selection: remote.destination) { destination in
                     withAnimation(.easeInOut(duration: 0.16)) {
                         selectedChainComponent = .instrument
-                        remote.select($0)
+                        remote.select(destination)
                     }
                 }
             }
