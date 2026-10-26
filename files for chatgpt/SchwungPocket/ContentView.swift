@@ -105,10 +105,14 @@ struct ContentView: View {
         }
         .background(Theme.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !navigationHidden || !navigationAutoHideEnabled {
-                bottomNavigation
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
+            let footerVisible = !navigationHidden || !navigationAutoHideEnabled
+            bottomNavigation
+                .frame(height: footerVisible ? 64 : 0, alignment: .top)
+                .opacity(footerVisible ? 1 : 0)
+                .clipped()
+                .allowsHitTesting(footerVisible)
+                .accessibilityHidden(!footerVisible)
+                .animation(.easeInOut(duration: 0.2), value: footerVisible)
         }
         .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
         .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
