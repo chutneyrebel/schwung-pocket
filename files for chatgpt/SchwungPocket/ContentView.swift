@@ -1495,8 +1495,8 @@ private struct FullscreenMirrorView: View {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Button { dismiss() } label: {
-                            Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
-                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            Image(systemName: "xmark").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Exit full-screen mirror")
                         Spacer()
@@ -1505,11 +1505,11 @@ private struct FullscreenMirrorView: View {
                                 ForEach(MirrorDisplayMode.allCases) { mode in
                                     Button { displayModeSelection = mode.rawValue } label: {
                                         VStack(spacing: 3) {
-                                            Image(systemName: mode.symbol).font(.system(size: 15, weight: .semibold))
+                                            Image(systemName: mode.symbol).font(.system(size: 18.75, weight: .semibold))
                                             Text(mode.title).font(.system(size: 9, weight: .bold, design: .monospaced))
                                         }
                                         .foregroundStyle(displayModeSelection == mode.rawValue ? Theme.accent : Theme.muted)
-                                        .frame(width: 48, height: 46)
+                                        .frame(width: 60, height: 57.5)
                                         .background(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.16) : Theme.background.opacity(0.97), in: RoundedRectangle(cornerRadius: 10))
                                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.75) : Color.white.opacity(0.12), lineWidth: 1))
                                     }
@@ -1534,43 +1534,57 @@ private struct FullscreenMirrorView: View {
                             }
                         }
                         Button { audioTrigger = UUID() } label: {
-                            Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .bold))
-                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            Image(systemName: "speaker.wave.2.fill").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Enable mirror audio")
                         Button { recordTrigger = UUID() } label: {
-                            Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 14, weight: .bold))
-                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
                         Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: {
-                            Image(systemName: "arrow.clockwise").font(.system(size: 14, weight: .bold))
-                                .frame(width: 42, height: 42).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            Image(systemName: "globe").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Refresh full-screen mirror")
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.top, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Theme.background.opacity(0.98), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
                     Spacer()
                     HStack(spacing: 14) {
                         Circle().fill(device.status == .connected ? Theme.success : (device.status == .checking ? Theme.accent : Color.red)).frame(width: 9, height: 9)
                             .accessibilityLabel(device.status == .connected ? "Move connected" : device.status == .checking ? "Checking Move connection" : "Move offline")
-                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 18, weight: .semibold)) }
+                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
                             .accessibilityLabel("Refresh Move connection")
                         Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
-                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
+                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom out")
                         Text("\(Int(zoom * 100))%").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).frame(minWidth: 42)
                             .accessibilityLabel("Mirror zoom \(Int(zoom * 100)) percent")
-                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 18, weight: .semibold)) }
+                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom in")
                         Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
-                        Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: { Label(keepAwake ? "Keep Awake" : "Allow Sleep", systemImage: keepAwake ? "sun.max.fill" : "moon.zzz") }
+                        Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: keepAwake ? "sun.max.fill" : "moon.zzz")
+                                    .font(.system(size: verticalSizeClass == .compact ? 22.5 : 17.5, weight: .semibold))
+                                Text(keepAwake ? "Keep Awake" : "Allow Sleep")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .frame(minWidth: 82, minHeight: verticalSizeClass == .compact ? 48 : 42)
+                            .contentShape(Rectangle())
+                        }
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = false }
                             revealControlsButton()
                         } label: {
-                            Image(systemName: "eye.slash").font(.system(size: 18, weight: .semibold))
+                            Image(systemName: "eye.slash").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold))
                                 .foregroundStyle(Theme.accent)
                         }
                         .accessibilityLabel("Hide mirror controls")
@@ -1592,7 +1606,7 @@ private struct FullscreenMirrorView: View {
                             withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
                             showControlsButton = false
                         } label: {
-                            Image(systemName: "eye").font(.system(size: 15, weight: .bold))
+                            Image(systemName: "eye").font(.system(size: verticalSizeClass == .compact ? 18.75 : 15, weight: .bold))
                                 .foregroundStyle(Theme.accent)
                                 .frame(width: 38, height: 38)
                                 .background(Theme.background.opacity(0.97), in: Circle())
