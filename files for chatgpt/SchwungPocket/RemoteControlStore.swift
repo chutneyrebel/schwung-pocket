@@ -44,6 +44,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var audioFXCapacity = 2
     @Published private(set) var masterFXCapacity = 4
     @Published private(set) var customToolUIURL: String?
+    @Published private(set) var customComponentUIURLs: [String: String] = [:]
     @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
     @Published private(set) var slotInstrumentNames: [Int: String] = [:]
     @Published private(set) var availableSlotModules: [RemoteSlotModule] = []
@@ -388,6 +389,7 @@ final class RemoteControlStore: ObservableObject {
         audioFXCapacity = 2
         masterFXCapacity = 4
         customToolUIURL = nil
+        customComponentUIURLs = [:]
         parameters = []
         levels = []
         values = [:]
@@ -731,11 +733,22 @@ final class RemoteControlStore: ObservableObject {
             return
         }
         if type == "custom_ui" {
-            guard case .tool = wireTarget,
-                  message["component"] as? String == "tool" else { return }
+            let component = message["component"] as? String ?? ""
             let url = message["url"] as? String ?? ""
-            customToolUIURL = url.isEmpty ? nil : url
-            RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
+            switch wireTarget {
+            case .tool where component == "tool":
+                customToolUIURL = url.isEmpty ? nil : url
+                RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
+            case .masterFX where component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil:
+                if url.isEmpty {
+                    customComponentUIURLs.removeValue(forKey: component)
+                } else {
+                    customComponentUIURLs[component] = url
+                }
+                RemoteDiagnostics.log("Master FX custom UI \(url.isEmpty ? "cleared" : "discovered") for \(component)")
+            default:
+                return
+            }
             return
         }
         // Cache each slot's instrument label whenever Schwung reports slot_info,
@@ -833,6 +846,7 @@ final class RemoteControlStore: ObservableObject {
             parameters.removeAll { $0.component == component }
             values = values.filter { !$0.key.hasPrefix(component + ":") }
             lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+            customComponentUIURLs.removeValue(forKey: component)
         }
 
         componentNames = names
