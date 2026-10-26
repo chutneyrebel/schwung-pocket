@@ -120,13 +120,20 @@ struct ManagerWebView: UIViewRepresentable {
               const mode = '__MODE__';
               const fit = __FIT__;
               const styleId = 'schwung-pocket-mirror-overrides';
+              if (!window.__spMirrorChromeObserver) {
+                window.__spMirrorChromeObserver = new MutationObserver(() => {
+                  if (window.__spMirrorChromeTimer) clearTimeout(window.__spMirrorChromeTimer);
+                  window.__spMirrorChromeTimer = setTimeout(() => { try { window.__spApplyMirrorLayout && window.__spApplyMirrorLayout(); } catch (_) {} }, 120);
+                });
+                window.__spMirrorChromeObserver.observe(document.documentElement, {childList:true, subtree:true});
+              }
               let style = document.getElementById(styleId);
               if (!style) { style = document.createElement('style'); style.id = styleId; document.head.appendChild(style); }
               style.textContent = `
                 html, body { width:100% !important; min-width:0 !important; max-width:100% !important; margin:0 !important; }
                 body { box-sizing:border-box !important; }
                 ${fit ? 'overflow-x:hidden !important;' : ''}
-                canvas, img, video, svg { max-width:100% !important; max-height:100dvh !important; object-fit:contain !important; }
+                canvas, img, video, svg { max-width:100% !important; max-height:100dvh !important; object-fit:contain !important; }\n                @media (orientation: landscape) { body { padding:0 !important; } header, nav { max-height:0 !important; overflow:hidden !important; } }
               `;
               if (fit) {
                 let viewport = document.querySelector('meta[name="viewport"]');
@@ -170,18 +177,18 @@ struct ManagerWebView: UIViewRepresentable {
               // Remove the portal's duplicate status/capture toolbar; native controls are above.
               for (const el of document.querySelectorAll('body *')) {
                 const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
-                if (text.length > 260 || !/screen \\+ device/i.test(text) || !/save png/i.test(text) || !/record/i.test(text)) continue;
+                if (text.length > 520 || !/(screen\\s*\\+\\s*device|screen|device)/i.test(text) || !/save png/i.test(text) || !/log/i.test(text) || !/record/i.test(text)) continue;
                 let candidate = el;
                 for (let depth = 0; depth < 4 && candidate.parentElement; depth++) {
                   const parent = candidate.parentElement;
                   const parentText = (parent.innerText || parent.textContent || '').replace(/\\s+/g, ' ').trim();
-                  if (parentText.length > 420) break;
+                  if (parentText.length > 620) break;
                   candidate = parent;
                 }
                 if (!candidate.dataset.spMirrorCaptureToolbar) candidate.dataset.spMirrorCaptureToolbar = candidate.style.display || '__default__';
                 candidate.style.display = 'none';
               }
-              roots.forEach((el, i) => {
+              window.__spApplyMirrorLayout = () => {\n              roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
                 el.style.display = show ? (original === '__default__' ? '' : original) : 'none';
@@ -191,7 +198,7 @@ struct ManagerWebView: UIViewRepresentable {
                   if (mode !== 'both') { el.style.width = '100vw'; el.style.height = '100dvh'; el.style.objectFit = 'contain'; }
                 }
               });
-              document.documentElement.style.width = '100%'; document.body.style.width = '100%';
+              document.documentElement.style.width = '100%'; document.body.style.width = '100%';\n              };\n              window.__spApplyMirrorLayout();
               window.__spApplyMirrorLayout = () => {
                 const current = (window.__spMirrorRoots || []).filter(el => el && el.isConnected);
                 // Restore original visibility before measuring. Otherwise a previously hidden
