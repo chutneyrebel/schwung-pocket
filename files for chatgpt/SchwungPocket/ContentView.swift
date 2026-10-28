@@ -36,7 +36,7 @@ private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .connection: return "Connection & MIDI Activity"
-        case .mixer: return "Four-slot Mixer"
+        case .mixer: return "Performance Mixer"
         case .signalChain: return "Signal Chain & Installed Modules"
         case .parameters: return "Parameter Controls"
         case .slotSettings: return "Slot Settings"
@@ -1744,20 +1744,25 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
     @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
     @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 1
-    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedTrollerSectionOrder = "connection,mixer,signalChain,parameters,slotSettings"
+    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedTrollerSectionOrder = "mixer,signalChain,parameters,connection,slotSettings"
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
 
 
     private var orderedTrollerSections: [TrollerPreferenceSection] {
-        let saved = storedTrollerSectionOrder.split(separator: ",").compactMap { TrollerPreferenceSection(rawValue: String($0)) }
-        return saved + TrollerPreferenceSection.allCases.filter { !saved.contains($0) }
+        let saved = storedTrollerSectionOrder.split(separator: ",")
+            .compactMap { TrollerPreferenceSection(rawValue: String($0)) }
+            .filter { $0 != .mixer }
+        return [.mixer] + saved + TrollerPreferenceSection.allCases.filter { $0 != .mixer && !saved.contains($0) }
     }
 
     private func moveTrollerSection(from index: Int, by offset: Int) {
         var sections = orderedTrollerSections
         let destination = index + offset
-        guard sections.indices.contains(index), sections.indices.contains(destination) else { return }
+        guard sections.indices.contains(index),
+              sections.indices.contains(destination),
+              sections[index] != .mixer,
+              destination > 0 else { return }
         let item = sections.remove(at: index)
         sections.insert(item, at: destination)
         storedTrollerSectionOrder = sections.map(\.rawValue).joined(separator: ",")
@@ -2010,7 +2015,7 @@ private struct ConnectionSettingsScreen: View {
                             Label("SchwungTroller section order", systemImage: "arrow.up.arrow.down")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white)
-                            Text("Arrange the sections in the order that works best for your performance workflow. Changes are saved automatically.")
+                            Text("The Performance Mixer stays at the top. Arrange the remaining sections to match your workflow; changes are saved automatically.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.muted)
                             ForEach(Array(orderedTrollerSections.enumerated()), id: \.element.id) { item in
@@ -2024,16 +2029,23 @@ private struct ConnectionSettingsScreen: View {
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.white)
                                     Spacer()
-                                    Button { moveTrollerSection(from: index, by: -1) } label: {
-                                        Image(systemName: "chevron.up")
+                                    if section == .mixer {
+                                        Text("PINNED")
+                                            .font(.system(size: 9, weight: .heavy))
+                                            .tracking(0.8)
+                                            .foregroundStyle(Theme.muted)
+                                    } else {
+                                        Button { moveTrollerSection(from: index, by: -1) } label: {
+                                            Image(systemName: "chevron.up")
+                                        }
+                                        .disabled(index <= 1)
+                                        .opacity(index <= 1 ? 0.3 : 1)
+                                        Button { moveTrollerSection(from: index, by: 1) } label: {
+                                            Image(systemName: "chevron.down")
+                                        }
+                                        .disabled(index == orderedTrollerSections.count - 1)
+                                        .opacity(index == orderedTrollerSections.count - 1 ? 0.3 : 1)
                                     }
-                                    .disabled(index == 0)
-                                    .opacity(index == 0 ? 0.3 : 1)
-                                    Button { moveTrollerSection(from: index, by: 1) } label: {
-                                        Image(systemName: "chevron.down")
-                                    }
-                                    .disabled(index == orderedTrollerSections.count - 1)
-                                    .opacity(index == orderedTrollerSections.count - 1 ? 0.3 : 1)
                                 }
                                 .font(.system(size: 13, weight: .medium))
                                 .padding(.vertical, 5)
