@@ -969,7 +969,11 @@ final class RemoteControlStore: ObservableObject {
             guard let text else { continue }
             if key == "slot:muted" { state.muted = text == "1" || text.lowercased() == "true" }
             if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
-            if key == "slot:volume", let raw = Double(text) { slotVolumes[slot] = min(max(raw, 0), 4) }
+            if key == "slot:volume", let raw = Double(text), raw.isFinite {
+                let clamped = min(max(raw, 0), 4)
+                state.volume = clamped
+                slotVolumes[slot] = clamped
+            }
         }
         slotMixStates[slot] = state
     }
