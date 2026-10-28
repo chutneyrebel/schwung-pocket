@@ -20,7 +20,7 @@
 - [x] Install/Swap menus positioned beside their chain positions.
 - [x] Collapsible Connection, Mixer, Signal Chain, Installed Modules, Parameter Controls and Slot Settings sections.
 - [x] Hide the redundant window title using the scene-level hidden-title-bar style.
-- [ ] Verify latest GitHub Actions artifact opens and the layout is usable at normal and narrow window sizes.
+- [ ] Verify latest GitHub Actions artifact opens and the layout is usable at normal and narrow window sizes. Latest source build/package passed in Actions run [#45](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499); runtime launch remains untested.
 - [ ] Confirm mixer volume, mute/solo, bypass, clear and module swap against the physical Move.
 
 ## P1: Port iOS v0.9 SchwungTroller behaviour
@@ -28,13 +28,13 @@
 - [x] **Persistent section ordering.** Added Settings controls to move sections up/down, save automatically with `@AppStorage`, and render panels in saved order. Runtime persistence still needs a macOS check.
 - [x] **Persistent collapse state.** Expanded/collapsed choices now save to macOS preferences via `@AppStorage`; runtime persistence still needs checking.
 - [x] **Live MIDI activity bridge and UI.** Added a macOS `MirrorMIDIActivityStore`, WebKit message handler, Note/CC mirror-page bridge, green/yellow active indicator and collapsible recent-event log. Needs runtime and physical Move verification; the mirror page's event surfaces may vary.
-- [ ] **Connection display parity.** Port the current iOS connection status, reconnect/timeout feedback and lifecycle recovery where relevant. Keep one authoritative connection state and avoid opening duplicate sockets.
+- [ ] **Connection display parity.** macOS already has connection states, retry backoff, generation checks and load timeout feedback. Remaining work is a focused audit of address-change and view lifecycle paths against iOS; runtime recovery still needs testing.
 - [x] **Section organisation.** Signal Chain and Installed Modules now share one collapsible logical panel, with install/swap controls retained alongside their positions.
 - [ ] **Avoid duplicate controls.** Keep parameter controls scoped to the selected component and retain the parameter-group selector inside Parameter Controls.
 
 ## P2: Port protocol and feature improvements from iOS v0.9
 
-- [ ] Compare the latest iOS remote-control store and models against macOS before changing protocol handling.
+- [x] Compare the latest iOS remote-control store and models against macOS before changing protocol handling. Current reference inspected on `v0.9-development`; macOS slot mixer model now includes optional `volume` to match iOS.
 - [ ] Port fixes for boolean mute/solo values and state refreshes, where the macOS protocol path differs.
 - [ ] Preserve dynamic MIDI FX/audio FX chain capacity and positional mapping; do not hard-code four positions if Schwung reports more.
 - [ ] Keep Master FX, Tool custom UI and metadata-driven parameter behaviour aligned with verified iOS protocol handling.
@@ -54,7 +54,7 @@
 - Current macOS target: `macOS/Sources/SchwungPocketMac/`.
 - Current iOS reference source: `files for chatgpt/SchwungPocket/` on `v0.9-development`.
 - iOS v0.9 already includes reorderable/collapsible SchwungTroller sections, persisted section order, vertical faders, and a real MIDI activity store. macOS must port these behaviours, not leave placeholder MIDI state.
-- The last confirmed macOS build pass before the MIDI/section-order work is GitHub Actions run [#34](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726883873), commit `f23a98b`. Build success confirms compile/package only, not runtime or Move hardware behaviour. Runs [#35](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726939672), [#36](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727164013), [#37](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727210173) and [#38](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727907403) were queued at the last status check. The newer collapse-persistence and combined-chain changes are in commit `7a6088a` and still require a build.
+- The latest confirmed macOS build/package pass is GitHub Actions run [#45](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499), commit `76484c5`, including the mixer model parity fix and preceding divider fix. Earlier runs #39–#42 failed because the model lacked `RemoteSlotMixState.volume` and the UI referenced an undefined `Theme.border`; both source issues have been corrected in later commits. Run #43 is an older queued run for an intermediate commit and should not be used to judge current source. Build success confirms compile/package only, not runtime or Move hardware behaviour.
 
 ## Ongoing iOS-to-macOS sync workflow
 
@@ -72,8 +72,8 @@
 |---|---|---|
 | SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Order and expanded/collapsed state implemented with `@AppStorage`; combined source build/runtime verification pending |
 | Live MIDI event bridge and activity log | `ManagerWebView.swift` + `NativeControlsScreen.swift` on `v0.9-development` | Bridge/store/UI implemented; build #34 passed for bridge commit; later UI build pending; runtime/Move verification pending |
-| Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Compare and port differences |
-| Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Partial; needs parity audit |
+| Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Mac has retry backoff, generation guards and load timeout; address/view lifecycle parity still needs review and runtime verification |
+| Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Optional volume field aligned with iOS; finite volume validation retained; physical mixer and subscription refresh need testing |
 | Release notes and protocol support details | `RELEASE_NOTES.md` on `v0.9-development` | Review on each sync |
 
 ## Working rules
