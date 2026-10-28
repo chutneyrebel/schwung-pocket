@@ -46,6 +46,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var customToolUIURL: String?
     @Published private(set) var customComponentUIURLs: [String: String] = [:]
     @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
+    @Published private(set) var slotVolumes: [Int: Double] = [:]
     @Published private(set) var slotInstrumentNames: [Int: String] = [:]
     @Published private(set) var availableSlotModules: [RemoteSlotModule] = []
     @Published private(set) var isLoadingSlotModules = false
@@ -968,6 +969,7 @@ final class RemoteControlStore: ObservableObject {
             guard let text else { continue }
             if key == "slot:muted" { state.muted = text == "1" || text.lowercased() == "true" }
             if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
+            if key == "slot:volume", let raw = Double(text) { slotVolumes[slot] = min(max(raw, 0), 4) }
         }
         slotMixStates[slot] = state
     }
@@ -979,9 +981,20 @@ final class RemoteControlStore: ObservableObject {
         for slot in 0...3 { subscribe(slot: slot) }
     }
 
+    func slotVolume(for slot: Int) -> Double {
+        min(max(slotVolumes[slot] ?? 1.0, 0), 4)
+    }
+
     func setSlotVolume(_ proposed: Double) {
+        guard case .slot(let slot) = wireTarget else { return }
+        setSlotVolume(proposed, slot: slot)
+    }
+
+    func setSlotVolume(_ proposed: Double, slot: Int) {
+        guard isConnected, (0...3).contains(slot) else { return }
         let stepped = (min(max(proposed, 0), 4) / 0.05).rounded() * 0.05
-        setSlotSetting("slot:volume", value: String(format: "%.2f", stepped))
+        slotVolumes[slot] = stepped
+        setSlotSetting("slot:volume", value: String(format: "%.2f", stepped), slot: slot)
     }
 
     func setSlotMuted(_ isMuted: Bool) {
