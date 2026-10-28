@@ -2,6 +2,7 @@
 
 **Branch:** `macos-app`  
 **Parity reference:** `v0.9-development`  
+**Sync policy:** Review `v0.9-development` before each macOS feature/protocol task. Port applicable behaviour and supporting knowledge selectively; do not merge the iOS branch wholesale.  
 **Rule:** The iOS v0.9 branch is the feature and protocol reference. Port behaviour and protocol knowledge where applicable, but adapt presentation and lifecycle to macOS. Do not copy iOS-only navigation or UIKit implementation literally. Do not merge or push to `main` without explicit approval.
 
 ## Status key
@@ -54,6 +55,26 @@
 - Current iOS reference source: `files for chatgpt/SchwungPocket/` on `v0.9-development`.
 - iOS v0.9 already includes reorderable/collapsible SchwungTroller sections, persisted section order, vertical faders, and a real MIDI activity store. macOS must port these behaviours, not leave placeholder MIDI state.
 - The last confirmed macOS build pass before this roadmap is GitHub Actions run [#30](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40713135033), commit `b91d8f7`. Build success confirms compile/package only, not runtime or Move hardware behaviour.
+
+## Ongoing iOS-to-macOS sync workflow
+
+1. Before each macOS task, inspect new commits and relevant source changes on `v0.9-development` since the last parity review.
+2. Compare iOS and macOS implementations for the affected feature, protocol messages, models, connection lifecycle, release notes and supporting documentation.
+3. Record applicable additions, protocol differences, and macOS-specific adaptations in this roadmap or task notes.
+4. Port only applicable changes to `macos-app`; do not copy UIKit/SwiftUI iOS navigation or platform-only code verbatim.
+5. Build with GitHub Actions after each focused port and report build status separately from hardware validation.
+6. Keep a parity ledger with reference commit SHA, affected feature, macOS port status and verification status.
+7. Never merge branches or change `main` without explicit user approval.
+
+## Parity ledger
+
+| Area | iOS reference | macOS status |
+|---|---|---|
+| SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Planned |
+| Live MIDI event bridge and activity log | `ManagerWebView.swift` + `NativeControlsScreen.swift` on `v0.9-development` | Planned; macOS WebKit bridge required |
+| Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Compare and port differences |
+| Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Partial; needs parity audit |
+| Release notes and protocol support details | `RELEASE_NOTES.md` on `v0.9-development` | Review on each sync |
 
 ## Working rules
 
