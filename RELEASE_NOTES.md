@@ -211,7 +211,8 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 - Tool discovery/UI still needs a targeted retest with the user's `drums practice` Tool.
 - Physical Move verification that the `drums practice` Tool identity, state and custom UI appear correctly.
 - Full Mirror display/scaling validation. Mirror audio has been confirmed working by the user.
-- Transport controls (play/stop and related actions) still need protocol investigation/validation and are not a release blocker for unrelated features.
+- Transport protocol investigation completed: Schwung Manager's Remote UI WebSocket handler accepts subscription, parameter-write, hierarchy and Tool/Master FX messages, but exposes no global Move play/stop command. The Overtake Tool's transport state feed is Tool-specific and does not provide global transport control. Do not add speculative play/stop messages. Revisit only if Schwung exposes a documented control path.
+- Master FX hot-swap remains unresolved: the legacy DSP-path fallback removes the error but has not been confirmed to replace the effect on the Move. Deferred to the v1.0 roadmap; do not treat as fixed in v0.8.3.
 - Sample transfer from Sample Lab to the Move is not confirmed.
 - Full regression pass across the entire checklist is outstanding.
 
