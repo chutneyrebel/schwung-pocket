@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import WebKit
 
@@ -176,7 +177,7 @@ struct HomeScreen: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(18)
-                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             }
             .padding(24)
         }
@@ -201,7 +202,7 @@ struct HomeTile: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
-            .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 14))
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
             .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
@@ -232,7 +233,7 @@ struct StudioScreen: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Button("Open Schwung Manager") { NSWorkspace.shared.open(device.endpoint("/")) }
+                Button("Open Schwung Manager") { if let url = device.endpoint("/") { NSWorkspace.shared.open(url) } }
                     .buttonStyle(.borderedProminent)
                     .tint(.mint)
             }
@@ -263,9 +264,9 @@ struct SettingsScreen: View {
                 }
             }
             Section("Known endpoints") {
-                LabeledContent("Manager", value: device.endpoint("/").absoluteString)
-                LabeledContent("Remote UI", value: device.endpoint("/remote-ui").absoluteString)
-                LabeledContent("Files", value: device.endpoint("/files").absoluteString)
+                LabeledContent("Manager", value: device.endpoint("/")?.absoluteString ?? "Invalid address")
+                LabeledContent("Remote UI", value: device.endpoint("/remote-ui")?.absoluteString ?? "Invalid address")
+                LabeledContent("Files", value: device.endpoint("/files")?.absoluteString ?? "Invalid address")
             }
         }
         .formStyle(.grouped)
@@ -301,7 +302,7 @@ struct DeviceWebScreen: View {
                 DeviceWebView(url: url, reloadID: loadID)
                     .background(Color.black)
             } else {
-                ContentUnavailableView("Invalid address", systemImage: "network.slash", description: Text("Open Connection to enter the Move's local address."))
+                VStack(spacing: 10) { Image(systemName: "network.slash").font(.largeTitle); Text("Invalid address").font(.headline); Text("Open Connection to enter the Move address.").foregroundStyle(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
