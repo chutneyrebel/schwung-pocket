@@ -2,8 +2,8 @@
 
 **Branch:** `macos-app`  
 **Reference branch:** `v0.9-development`  
-**Last source change at checklist creation:** `0804303`  
-**Status:** Ready for laptop testing after a successful GitHub Actions build. Physical Move tests are still pending.
+**Latest verified source commit:** `76484c5`  
+**Latest build/package result:** Actions run [#45 passed](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499). Physical app launch, UI behaviour and Move tests are still pending.
 
 Use this checklist when the MacBook and Ableton Move are available. Mark each item as Pass, Fail, or Not tested, and include the build number and Move/Schwung version for any failure.
 
@@ -86,6 +86,7 @@ For each of Slots 1–4:
 
 ## Build tracking
 
-- Run #34 passed for the initial mirror WebKit bridge commit `f23a98b`.
-- Runs #35 onward cover the activity UI, section ordering, persisted collapse state, grouped chain panel, roadmap updates and mixer-value validation. Check the latest run on the [macos-app Actions page](https://github.com/chutneyrebel/schwung-pocket/actions?query=branch%3Amacos-app) before downloading.
+- Run #45 passed for commit `76484c5`, including the mixer model parity fix and earlier divider fix. Download the artifact associated with this run from [GitHub Actions](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499).
+- Runs #39–#42 failed on two compile errors that are fixed in later commits. Run #43 targets an intermediate commit and may remain queued; it does not supersede the successful #45 build.
+- Check the [macos-app Actions page](https://github.com/chutneyrebel/schwung-pocket/actions?query=branch%3Amacos-app) for newer commits before downloading.
 - Build success validates compilation and packaging only. Sections B–H require runtime testing, and sections D–G require Move verification.
