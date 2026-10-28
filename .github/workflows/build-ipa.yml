@@ -247,16 +247,13 @@ jobs:
           fi
           OUT="$GITHUB_WORKSPACE/SchwungPocket-release-notes.md"
           {
-            echo "# Schwung Pocket — Build Notes"
-            echo
-            echo "- **Branch:** `$GITHUB_REF_NAME`"
-            echo "- **Commit:** `$GITHUB_SHA`"
-            echo "- **Workflow run:** `$GITHUB_RUN_NUMBER` (run ID `$GITHUB_RUN_ID`)"
-            echo "- **Build timestamp (UTC):** `$(date -u '+%Y-%m-%d %H:%M:%S')`"
-            echo "- **Build result:** see the GitHub Actions run status; this document alone does not imply success."
-            echo
-            echo "---"
-            echo
+            printf '# Schwung Pocket — Build Notes\n\n'
+            printf -- '- **Branch:** `%s`\n' "$GITHUB_REF_NAME"
+            printf -- '- **Commit:** `%s`\n' "$GITHUB_SHA"
+            printf -- '- **Workflow run:** `%s` (run ID `%s`)\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID"
+            printf -- '- **Build timestamp (UTC):** `%s`\n' "$(date -u '+%Y-%m-%d %H:%M:%S')"
+            printf '%s\n' '- **Build result:** see the GitHub Actions run status; this document alone does not imply success.'
+            printf '\n---\n\n'
             cat "$NOTES"
           } > "$OUT"
           echo "Generated cumulative release notes: $OUT"
