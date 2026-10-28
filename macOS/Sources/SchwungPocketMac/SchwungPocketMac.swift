@@ -106,7 +106,7 @@ enum PocketSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "Overview"
-        case .mirror: "Move Mirror"
+        case .mirror: "Mirror"
         case .manager: "Schwung Manager"
         case .studio: "SchwungTroller"
         case .files: "Files"
@@ -126,7 +126,7 @@ enum PocketSection: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .home: "Your Move connection at a glance"
-        case .mirror: "The device's remote interface"
+        case .mirror: "Live Move display"
         case .manager: "Native window into Schwung Manager"
         case .studio: "Live controls from Schwung metadata"
         case .files: "Files exposed by Schwung"
@@ -192,7 +192,7 @@ struct HomeTile: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(Color.mint).frame(width: 42, height: 42).background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(Theme.accent).frame(width: 42, height: 42).background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title).font(.headline).foregroundStyle(.primary)
                     Text(detail).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.leading)
@@ -218,7 +218,7 @@ struct StudioScreen: View {
                 Text("This area is reserved for native controls driven by protocol messages verified against Schwung. The app will not send guessed messages to your instrument.")
                     .foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "checkmark.seal").foregroundStyle(.mint).font(.title2)
+                    Image(systemName: "checkmark.seal").foregroundStyle(Theme.accent).font(.title2)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Foundation in place").font(.headline)
                         Text("Move address handling, endpoint navigation, and connectivity checks are implemented.")
@@ -254,7 +254,7 @@ struct SettingsScreen: View {
                     .font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button("Test connection") { Task { await device.check() } }
-                        .buttonStyle(.borderedProminent).tint(.mint)
+                        .buttonStyle(.borderedProminent).tint(Theme.accent)
                         .disabled(device.isChecking)
                     if device.isChecking { ProgressView().controlSize(.small) }
                 }
@@ -265,7 +265,7 @@ struct SettingsScreen: View {
             }
             Section("Known endpoints") {
                 LabeledContent("Manager", value: device.endpoint("/")?.absoluteString ?? "Invalid address")
-                LabeledContent("Remote UI", value: device.endpoint("/remote-ui")?.absoluteString ?? "Invalid address")
+                LabeledContent("Remote UI", value: device.endpoint("/mirror")?.absoluteString ?? "Invalid address")
                 LabeledContent("Files", value: device.endpoint("/files")?.absoluteString ?? "Invalid address")
             }
         }
