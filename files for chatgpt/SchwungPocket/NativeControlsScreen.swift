@@ -462,6 +462,14 @@ struct NativeControlsScreen: View {
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
+                                    HStack(spacing: 5) {
+                                        Image(systemName: moduleName == nil ? "circle.dashed" : (remote.isComponentBypassed(component.rawValue) ? "pause.circle.fill" : "checkmark.circle.fill"))
+                                            .font(.system(size: 9, weight: .semibold))
+                                        Text(moduleName == nil ? "EMPTY POSITION" : (remote.isComponentBypassed(component.rawValue) ? "BYPASSED" : "ACTIVE"))
+                                            .font(.system(size: 8, weight: .heavy))
+                                            .tracking(0.7)
+                                    }
+                                    .foregroundStyle(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
                                 }
                                 .foregroundStyle(Color.white)
                                 .frame(maxWidth: .infinity, minHeight: 39, alignment: .leading)
@@ -501,11 +509,15 @@ struct NativeControlsScreen: View {
                         .padding(.horizontal, 9)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
-                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(selected ? Theme.accent.opacity(0.09) : Theme.surfaceRaised)
+                        }
                         .overlay {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
                         }
+                        .animation(.easeOut(duration: 0.16), value: selected)
                         .accessibilityElement(children: .contain)
                     }
                 }
@@ -1038,14 +1050,28 @@ struct NativeControlsScreen: View {
         let knobs = visible.filter { $0.kind == .knob }
         let others = visible.filter { $0.kind != .knob }
         return PocketCard {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text(remote.currentLevelName.uppercased()).font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(Theme.accent)
-                    Spacer()
-                    Text("LIVE").font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(Theme.success)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(selectedChainComponent.title.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.3)
+                            .foregroundStyle(Theme.accent)
+                        Text("\(visible.count) reported control\(visible.count == 1 ? "" : "s")")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 4)
+                    Text("LIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(1)
+                        .foregroundStyle(Theme.success)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Theme.success.opacity(0.10), in: Capsule())
                 }
                 if !knobs.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 78), spacing: 6, alignment: .top)], alignment: .center, spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8, alignment: .top)], alignment: .center, spacing: 14) {
                         ForEach(knobs) { parameter in knob(for: parameter) }
                     }
                 }
@@ -1249,6 +1275,7 @@ private struct ModuleSwapSheet: View {
     let masterFXComponent: String?
     @Environment(\.dismiss) private var dismiss
     @State private var pendingModule: RemoteSlotModule?
+    @State private var searchText = ""
 
     private var displayTitle: String {
         component?.title ?? masterFXComponent?.replacingOccurrences(of: "master_fx:", with: "").uppercased() ?? "Master FX"
@@ -1264,6 +1291,11 @@ private struct ModuleSwapSheet: View {
     private var choices: [RemoteSlotModule] {
         remote.availableSlotModules
             .filter { $0.componentType == expectedType && !$0.deviceOnly }
+            .filter {
+                searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || $0.name.localizedCaseInsensitiveContains(searchText)
+                    || $0.id.localizedCaseInsensitiveContains(searchText)
+            }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -1284,26 +1316,60 @@ private struct ModuleSwapSheet: View {
                         Button("Retry module discovery") { remote.loadSlotModules(address: address) }
                     }
                 }
-                Section("Installed \(displayTitle) modules") {
+                Section {
                     if choices.isEmpty {
-                        Text("No compatible modules found. Check that Schwung supports /api/slot-modules and try again.")
+                        Text(searchText.isEmpty
+                             ? "No compatible modules found. Check that Schwung supports /api/slot-modules and try again."
+                             : "No modules match “\(searchText)”. Try another name or module ID.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
                     }
                     ForEach(choices) { module in
                         Button {
                             pendingModule = module
                         } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(module.name).foregroundStyle(.primary)
-                                Text(module.id).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                            HStack(spacing: 10) {
+                                Image(systemName: module.id == pendingModule?.id ? "checkmark.circle.fill" : "waveform")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(module.id == pendingModule?.id ? Color.accentColor : .secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(module.name)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(module.id)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 4)
+                                if module.id == pendingModule?.id {
+                                    Text("SELECTED")
+                                        .font(.system(size: 8, weight: .heavy))
+                                        .tracking(0.6)
+                                        .foregroundStyle(Color.accentColor)
+                                }
                             }
+                            .padding(.vertical, 3)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    HStack {
+                        Text("Installed \(displayTitle)")
+                        Spacer()
+                        Text("\(choices.count)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
             .navigationTitle("Swap \(displayTitle)")
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchText, prompt: "Find a module")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
