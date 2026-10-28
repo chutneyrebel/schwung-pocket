@@ -35,6 +35,7 @@
 ## P2: Port protocol and feature improvements from iOS v0.9
 
 - [x] Compare the latest iOS remote-control store and models against macOS before changing protocol handling. Current reference inspected on `v0.9-development`; macOS slot mixer model now includes optional `volume` to match iOS.
+- [x] Clear cached mixer values (volume, mute/solo and instrument labels) when the WebSocket disconnects or loses connection, rather than displaying stale state as current. Build/runtime verification pending.
 - [ ] Port fixes for boolean mute/solo values and state refreshes, where the macOS protocol path differs.
 - [ ] Preserve dynamic MIDI FX/audio FX chain capacity and positional mapping; do not hard-code four positions if Schwung reports more.
 - [ ] Keep Master FX, Tool custom UI and metadata-driven parameter behaviour aligned with verified iOS protocol handling.
@@ -54,7 +55,7 @@
 - Current macOS target: `macOS/Sources/SchwungPocketMac/`.
 - Current iOS reference source: `files for chatgpt/SchwungPocket/` on `v0.9-development`.
 - iOS v0.9 already includes reorderable/collapsible SchwungTroller sections, persisted section order, vertical faders, and a real MIDI activity store. macOS must port these behaviours, not leave placeholder MIDI state.
-- The latest confirmed macOS build/package pass is GitHub Actions run [#45](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499), commit `76484c5`, including the mixer model parity fix and preceding divider fix. Earlier runs #39–#42 failed because the model lacked `RemoteSlotMixState.volume` and the UI referenced an undefined `Theme.border`; both source issues have been corrected in later commits. Run #43 is an older queued run for an intermediate commit and should not be used to judge current source. Build success confirms compile/package only, not runtime or Move hardware behaviour.
+- The latest confirmed macOS build/package pass remains GitHub Actions run [#45](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499), commit `76484c5`. Newer connection-lifecycle and mixer-cache changes are committed but not yet build-verified. Earlier runs #39–#42 failed because the model lacked `RemoteSlotMixState.volume` and the UI referenced an undefined `Theme.border`; both source issues have been corrected in later commits. Run #43 is an older queued run for an intermediate commit and should not be used to judge current source. Build success confirms compile/package only, not runtime or Move hardware behaviour.
 
 ## Ongoing iOS-to-macOS sync workflow
 
@@ -73,7 +74,7 @@
 | SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Order and expanded/collapsed state implemented with `@AppStorage`; combined source build/runtime verification pending |
 | Live MIDI event bridge and activity log | `ManagerWebView.swift` + `NativeControlsScreen.swift` on `v0.9-development` | Bridge/store/UI implemented; build #34 passed for bridge commit; later UI build pending; runtime/Move verification pending |
 | Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Mac has retry backoff, generation guards, load timeout and `connectIfNeeded` parity; runtime reconnect/address-change verification pending |
-| Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Optional volume field aligned with iOS; finite volume validation retained; physical mixer and subscription refresh need testing |
+| Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Optional volume field aligned with iOS; finite volume validation retained; disconnect/loss clears stale mixer cache; build and physical mixer refresh verification pending |
 | Release notes and protocol support details | `RELEASE_NOTES.md` on `v0.9-development` | Review on each sync |
 
 ## Working rules
