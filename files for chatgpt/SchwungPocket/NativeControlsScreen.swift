@@ -251,14 +251,6 @@ struct NativeControlsScreen: View {
                     }
                     .buttonStyle(StudioSecondaryButton())
                     .disabled(!remote.isConnected)
-                    Button {
-                        showingClearConfirmation = true
-                    } label: {
-                        Label("Clear", systemImage: "xmark.circle")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    .buttonStyle(StudioSecondaryButton())
-                    .disabled(!remote.isConnected || remote.componentNames[selectedChainComponent.rawValue] == nil)
                 }
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
                     ForEach(chainComponents) { component in
@@ -331,33 +323,7 @@ struct NativeControlsScreen: View {
                         .accessibilityElement(children: .contain)
                     }
                 }
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(remote.isComponentBypassed(selectedChainComponent.rawValue) ? "MODULE BYPASSED" : "MODULE ACTIVE")
-                            .font(.system(size: 10, weight: .heavy))
-                            .tracking(1)
-                            .foregroundStyle(remote.isComponentBypassed(selectedChainComponent.rawValue) ? Theme.warning : Theme.success)
-                        Text(remote.componentNames[selectedChainComponent.rawValue] ?? "No module in this position")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Theme.muted)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 4)
-                    Button {
-                        remote.setComponentBypassed(
-                            selectedChainComponent.rawValue,
-                            bypassed: !remote.isComponentBypassed(selectedChainComponent.rawValue)
-                        )
-                    } label: {
-                        Label(
-                            remote.isComponentBypassed(selectedChainComponent.rawValue) ? "Enable" : "Bypass",
-                            systemImage: remote.isComponentBypassed(selectedChainComponent.rawValue) ? "play.fill" : "pause.fill"
-                        )
-                        .font(.system(size: 11, weight: .bold))
-                    }
-                    .buttonStyle(StudioSecondaryButton())
-                    .disabled(!remote.isConnected || remote.componentNames[selectedChainComponent.rawValue] == nil)
-                }
+
 
             }
         }
