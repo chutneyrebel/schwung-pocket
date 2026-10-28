@@ -10,9 +10,8 @@ struct SchwungPocketMac: App {
             PocketWindow(device: device)
                 .frame(minWidth: 980, minHeight: 640)
                 .preferredColorScheme(.dark)
-                .windowStyle(.hiddenTitleBar)
         }
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
