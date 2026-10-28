@@ -272,35 +272,33 @@ struct SchwungTrollerScreen: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Installed modules").font(.headline)
-                    Text("Module discovery from the Schwung Manager API")
+                    Text("MIDI FX → Instrument → Audio FX 1 → Audio FX 2")
                         .font(.caption).foregroundStyle(Theme.muted)
                 }
                 Spacer()
                 Button("Refresh") { remote.loadSlotModules(address: device.baseAddress) }
                     .buttonStyle(.bordered).tint(Theme.accent)
             }
-            if remote.availableSlotModules.isEmpty {
-                Text("No compatible modules discovered yet.")
-                    .font(.callout).foregroundStyle(Theme.muted)
-            } else {
-                ForEach(["synth", "midi_fx1", "fx1", "fx2"], id: \.self) { component in
-                    let compatible = remote.availableSlotModules.filter { module in
-                        let expected = component == "synth" ? "sound_generator" : (component.hasPrefix("midi_fx") ? "midi_fx" : "audio_fx")
-                        return module.componentType == expected && !module.deviceOnly
-                    }
-                    if !compatible.isEmpty {
-                        HStack {
-                            Text(component == "synth" ? "Instrument" : component.replacingOccurrences(of: "_", with: " ").uppercased())
-                                .font(.callout.weight(.medium))
-                            Spacer()
-                            Menu("Swap…") {
-                                ForEach(compatible) { module in
-                                    Button(module.name) { remote.swapModule(component: component, moduleID: module.id) }
-                                }
-                            }.tint(Theme.accent)
+            let components = ["midi_fx1", "synth", "fx1", "fx2"]
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(components, id: \.self) { component in
+                    let expected = component == "synth" ? "sound_generator" : (component.hasPrefix("midi_fx") ? "midi_fx" : "audio_fx")
+                    let compatible = remote.availableSlotModules.filter { $0.componentType == expected && !$0.deviceOnly }
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(component == "synth" ? "Instrument" : (component == "midi_fx1" ? "MIDI" : "Audio FX \(component == "fx1" ? "1" : "2")"))
+                            .font(.system(size: 10, weight: .bold)).lineLimit(1)
+                        Text(remote.componentNames[component] ?? "Empty")
+                            .font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(2).frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
+                        Menu("Install / Swap") {
+                            ForEach(compatible) { item in
+                                Button(item.name) { remote.swapModule(component: component, moduleID: item.id) }
+                            }
                         }
-                        Divider().overlay(Color.white.opacity(0.05))
+                        .font(.system(size: 10, weight: .semibold)).tint(Theme.accent)
+                        .disabled(compatible.isEmpty)
                     }
+                    .padding(9).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
                 }
             }
         }
@@ -367,30 +365,43 @@ struct SchwungTrollerScreen: View {
 
     private var slotChainPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("SLOT SIGNAL CHAIN").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(Theme.muted)
-                Spacer()
-                Button(remote.isComponentBypassed(selectedComponent) ? "Enable" : "Bypass") {
-                    remote.setComponentBypassed(selectedComponent, bypassed: !remote.isComponentBypassed(selectedComponent))
-                }.buttonStyle(.bordered).tint(Theme.accent)
-                    .disabled(!remote.isConnected || remote.componentNames[selectedComponent] == nil)
-                Button("Clear") { remote.clearSlotModule(component: selectedComponent) }
-                    .buttonStyle(.bordered).tint(Theme.warning)
-                    .disabled(!remote.isConnected || remote.componentNames[selectedComponent] == nil)
-            }
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
-                ForEach((1...max(remote.midiFXCapacity, 1)).map { "midi_fx\($0)" } + ["synth"] + (1...max(remote.audioFXCapacity, 1)).map { "fx\($0)" }, id: \.self) { component in
-                    let title = component == "synth" ? "Instrument" : component.replacingOccurrences(of: "_", with: " ").uppercased()
+            Text("SLOT SIGNAL CHAIN").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(Theme.muted)
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(["midi_fx1", "synth", "fx1", "fx2"], id: \.self) { component in
+                    let title = component == "synth" ? "Instrument" : (component == "midi_fx1" ? "MIDI" : "Audio FX \(component == "fx1" ? "1" : "2")")
                     let selected = selectedComponent == component
-                    Button { selectedComponent = component } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(title).font(.system(size: 12, weight: .bold))
-                            Text(remote.componentNames[component] ?? "Not loaded").font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(1)
+                    let loaded = remote.componentNames[component] != nil
+                    let bypassed = remote.isComponentBypassed(component)
+                    VStack(alignment: .leading, spacing: 7) {
+                        Button { selectedComponent = component } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(title).font(.system(size: 11, weight: .bold)).lineLimit(1)
+                                Text(remote.componentNames[component] ?? "Empty")
+                                    .font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(2).frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .foregroundStyle(.white)
+                        }.buttonStyle(.plain)
+                        HStack(spacing: 4) {
+                            Circle().fill(loaded && !bypassed ? Theme.success : Theme.warning).frame(width: 6, height: 6)
+                            Text(!loaded ? "EMPTY" : (bypassed ? "OFF" : "ON"))
+                                .font(.system(size: 9, weight: .heavy))
+                                .foregroundStyle(!loaded || bypassed ? Theme.warning : Theme.success)
                         }
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(10)
-                        .foregroundStyle(.white).background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
-                        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1) }
-                    }.buttonStyle(.plain)
+                        Button(bypassed ? "Enable" : "Bypass") {
+                            remote.setComponentBypassed(component, bypassed: !bypassed)
+                        }
+                        .font(.system(size: 10, weight: .semibold))
+                        .buttonStyle(.bordered).tint(bypassed ? Theme.success : Theme.accent)
+                        .disabled(!remote.isConnected || !loaded)
+                        Button("Clear") { remote.clearSlotModule(component: component) }
+                            .font(.system(size: 10, weight: .semibold))
+                            .buttonStyle(.bordered).tint(Theme.warning)
+                            .disabled(!remote.isConnected || !loaded)
+                    }
+                    .padding(9).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1) }
                 }
             }
         }
