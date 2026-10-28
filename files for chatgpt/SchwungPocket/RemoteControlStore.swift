@@ -15,6 +15,7 @@ import SwiftUI
 struct RemoteSlotMixState {
     var muted: Bool?
     var soloed: Bool?
+    var volume: Double?
 }
 
 @MainActor
@@ -912,6 +913,10 @@ final class RemoteControlStore: ObservableObject {
         slotMixStates[wireSlot]?.soloed ?? false
     }
 
+    func slotVolume(for wireSlot: Int) -> Double {
+        min(max(slotMixStates[wireSlot]?.volume ?? 1.0, 0), 4)
+    }
+
     private func updateSlotMixState(slot: Int, params: [String: Any]) {
         guard (0...3).contains(slot) else { return }
         var state = slotMixStates[slot] ?? RemoteSlotMixState()
@@ -923,6 +928,9 @@ final class RemoteControlStore: ObservableObject {
             guard let text else { continue }
             if key == "slot:muted" { state.muted = text == "1" || text.lowercased() == "true" }
             if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
+            if key == "slot:volume", let number = Double(text), number.isFinite {
+                state.volume = min(max(number, 0), 4)
+            }
         }
         slotMixStates[slot] = state
     }
@@ -935,8 +943,17 @@ final class RemoteControlStore: ObservableObject {
     }
 
     func setSlotVolume(_ proposed: Double) {
+        guard case .slot(let slot) = wireTarget else { return }
+        setSlotVolume(proposed, slot: slot)
+    }
+
+    func setSlotVolume(_ proposed: Double, slot: Int) {
+        guard isConnected, (0...3).contains(slot) else { return }
         let stepped = (min(max(proposed, 0), 4) / 0.05).rounded() * 0.05
-        setSlotSetting("slot:volume", value: String(format: "%.2f", stepped))
+        var state = slotMixStates[slot] ?? RemoteSlotMixState()
+        state.volume = stepped
+        slotMixStates[slot] = state
+        setSlotSetting("slot:volume", value: String(format: "%.2f", stepped), slot: slot)
     }
 
     func setSlotMuted(_ isMuted: Bool) {
