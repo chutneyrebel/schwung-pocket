@@ -7,8 +7,8 @@ struct SchwungTrollerScreen: View {
     @StateObject private var remote = RemoteControlStore()
     @State private var selectedComponent = "synth"
     @State private var showingModulePicker = false
-    @State private var expandedSections: Set<String> = Set(["mixer", "chain", "modules", "parameters", "settings"])
-    @AppStorage("SchwungPocketMac.TrollerSectionOrder.v1") private var storedSectionOrder = "connection,mixer,chain,modules,parameters,settings"
+    @AppStorage("SchwungPocketMac.TrollerExpandedSections.v1") private var storedExpandedSections = "mixer,chain,parameters,settings"
+    @AppStorage("SchwungPocketMac.TrollerSectionOrder.v1") private var storedSectionOrder = "connection,mixer,chain,parameters,settings"
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
@@ -33,7 +33,7 @@ struct SchwungTrollerScreen: View {
     }
 
     private var orderedSectionKeys: [String] {
-        let allowed = ["connection", "mixer", "chain", "modules", "parameters", "settings"]
+        let allowed = ["connection", "mixer", "chain", "parameters", "settings"]
         let saved = storedSectionOrder.split(separator: ",").map(String.init).filter { allowed.contains($0) }
         return saved + allowed.filter { !saved.contains($0) }
     }
@@ -64,18 +64,15 @@ struct SchwungTrollerScreen: View {
         case "chain":
             if isSlotDestination {
                 DisclosureGroup(isExpanded: expansion("chain")) {
-                    slotChainPicker.padding(.top, 10)
-                } label: { sectionLabel("Signal Chain", symbol: "point.3.connected.trianglepath.dotted") }
+                    VStack(alignment: .leading, spacing: 14) {
+                        slotChainPicker
+                        Divider().overlay(Theme.border)
+                        moduleSwapSection
+                    }.padding(.top, 10)
+                } label: { sectionLabel("Signal Chain and Modules", symbol: "point.3.connected.trianglepath.dotted") }
                     .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
             } else if remote.destination == .masterFX {
                 masterFXModuleSection
-            }
-        case "modules":
-            if isSlotDestination {
-                DisclosureGroup(isExpanded: expansion("modules")) {
-                    moduleSwapSection.padding(.top, 10)
-                } label: { sectionLabel("Installed Modules", symbol: "square.stack.3d.up") }
-                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
             }
         case "parameters":
             if remote.destination == .tool {
@@ -170,8 +167,7 @@ struct SchwungTrollerScreen: View {
         switch key {
         case "connection": "Connection and MIDI Activity"
         case "mixer": "Four-slot Mixer"
-        case "chain": "Signal Chain"
-        case "modules": "Installed Modules"
+        case "chain": "Signal Chain and Modules"
         case "parameters": "Parameter Controls"
         default: "Slot Settings and Section Order"
         }
@@ -187,8 +183,10 @@ struct SchwungTrollerScreen: View {
     }
 
     private func expansion(_ key: String) -> Binding<Bool> {
-        Binding(get: { expandedSections.contains(key) }, set: { value in
-            if value { expandedSections.insert(key) } else { expandedSections.remove(key) }
+        Binding(get: { Set(storedExpandedSections.split(separator: ",").map(String.init)).contains(key) }, set: { value in
+            var expanded = Set(storedExpandedSections.split(separator: ",").map(String.init))
+            if value { expanded.insert(key) } else { expanded.remove(key) }
+            storedExpandedSections = expanded.sorted().joined(separator: ",")
         })
     }
 
