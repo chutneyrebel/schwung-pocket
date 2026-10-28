@@ -46,8 +46,8 @@ private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
-    @StateObject private var remote = RemoteControlStore()
     @State private var selectedTab: PocketTab = .home
+    @State private var hasOpenedNativeControls = false
     @State private var selectedStudioModule: PocketStudioModule?
     @State private var navigationHidden = false
     @State private var navigationHideTask: Task<Void, Never>?
@@ -79,7 +79,7 @@ struct ContentView: View {
         case .home:
             HomeScreen(device: device, openModules: { selectedTab = .modules }, openStudioModule: { module in selectedStudioModule = module; selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
         case .nativeControls:
-            NativeControlsScreen(device: device, remote: remote)
+            NativeControlsScreen(device: device)
         case .modules:
             if let module = selectedStudioModule {
                 VStack(spacing: 0) {
@@ -124,7 +124,16 @@ struct ContentView: View {
                 .allowsHitTesting(selectedTab == .mirror)
                 .accessibilityHidden(selectedTab != .mirror)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if selectedTab != .mirror {
+            // Keep SchwungTroller alive after its first visit. Its WebSocket and module
+            // metadata then survive tab changes instead of reconnecting on every return.
+            if hasOpenedNativeControls {
+                NativeControlsScreen(device: device)
+                    .opacity(selectedTab == .nativeControls ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .nativeControls)
+                    .accessibilityHidden(selectedTab != .nativeControls)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if selectedTab != .mirror && selectedTab != .nativeControls {
                 content(for: selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -147,7 +156,10 @@ struct ContentView: View {
         .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
         .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
         .onAppear { scheduleNavigationHide() }
-        .onChange(of: selectedTab) { _ in revealNavigation() }
+        .onChange(of: selectedTab) { tab in
+            if tab == .nativeControls { hasOpenedNativeControls = true }
+            revealNavigation()
+        }
         .onChange(of: navigationAutoHideEnabled) { enabled in
             if enabled { scheduleNavigationHide() }
             else {
@@ -164,6 +176,7 @@ struct ContentView: View {
         HStack(spacing: 0) {
             ForEach(orderedTabs) { tab in
                 Button {
+                    if tab == .nativeControls { hasOpenedNativeControls = true }
                     selectedTab = tab
                     if tab == .modules { selectedStudioModule = nil }
                     revealNavigation()

@@ -56,7 +56,7 @@ private enum TrollerSection: String, CaseIterable, Identifiable {
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
-    @ObservedObject var remote: RemoteControlStore
+    @StateObject private var remote = RemoteControlStore()
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
@@ -107,10 +107,12 @@ struct NativeControlsScreen: View {
         }
          .onAppear {
             remote.loadSlotModules(address: device.addressText)
-            // The WebSocket subscribes to all four mixer slots when it connects.
-            // Keep those live subscriptions and cached M/S states when returning
-            // from Mirror instead of sending four duplicate subscribe requests.
+            // The screen stays mounted after its first visit, so this is normally a no-op.
+            // It reconnects only if the screen was disconnected or the Move address changed.
             remote.connectIfNeeded(address: device.addressText)
+        }
+        .onChange(of: device.addressText) { newAddress in
+            remote.connectIfNeeded(address: newAddress)
         }
         // Keep the remote subscription alive when switching between SchwungTroller and Mirror.
         // The scene-phase handler still manages background/foreground recovery.
