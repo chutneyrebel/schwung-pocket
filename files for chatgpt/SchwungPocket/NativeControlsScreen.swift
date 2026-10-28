@@ -41,6 +41,8 @@ struct NativeControlsScreen: View {
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
+    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "connection,mixer,signalChain,parameters,slotSettings"
+    @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = ""
 
     var body: some View {
         ModuleScreenShell(
@@ -48,17 +50,36 @@ struct NativeControlsScreen: View {
             title: "SchwungTroller",
             subtitle: "Live knobs and switches built from the instrument's own metadata."
         ) {
-            connectionCard
-            destinationCard
-            if isInstrumentSlot {
-                slotChainCard
-                parameterGroupCard
-            } else if isMasterFX {
-                masterFXCard
-            }
-            contentSection
-            if isInstrumentSlot {
-                slotSettingsCard
+            ForEach(orderedSections) { section in
+                if shouldShow(section) {
+                    DisclosureGroup(
+                        isExpanded: Binding(
+                            get: { !collapsedSections.contains(section.rawValue) },
+                            set: { expanded in setSection(section, expanded: expanded) }
+                        )
+                    ) {
+                        sectionContent(section)
+                            .padding(.top, 8)
+                    } label: {
+                        HStack(spacing: 9) {
+                            Image(systemName: section.symbol)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 22)
+                            Text(section.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                    }
+                    .tint(Theme.accent)
+                    .padding(13)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
+                    }
+                }
             }
         }
          .onAppear {
@@ -109,6 +130,52 @@ struct NativeControlsScreen: View {
         }
     }
 
+    private var orderedSections: [TrollerSection] {
+        let saved = storedSectionOrder.split(separator: ",").compactMap { TrollerSection(rawValue: String($0)) }
+        return saved + TrollerSection.allCases.filter { !saved.contains($0) }
+    }
+
+    private var collapsedSections: Set<String> {
+        Set(storedCollapsedSections.split(separator: ",").map(String.init))
+    }
+
+    private func setSection(_ section: TrollerSection, expanded: Bool) {
+        var collapsed = collapsedSections
+        if expanded { collapsed.remove(section.rawValue) }
+        else { collapsed.insert(section.rawValue) }
+        storedCollapsedSections = TrollerSection.allCases
+            .filter { collapsed.contains($0.rawValue) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    private func shouldShow(_ section: TrollerSection) -> Bool {
+        switch section {
+        case .connection, .mixer: return true
+        case .signalChain: return isInstrumentSlot || isMasterFX
+        case .parameters: return true
+        case .slotSettings: return isInstrumentSlot
+        }
+    }
+
+    @ViewBuilder
+    private func sectionContent(_ section: TrollerSection) -> some View {
+        switch section {
+        case .connection:
+            connectionCard
+        case .mixer:
+            destinationCard
+        case .signalChain:
+            if isInstrumentSlot { slotChainCard }
+            else if isMasterFX { masterFXCard }
+        case .parameters:
+            if isInstrumentSlot { parameterGroupCard }
+            contentSection
+        case .slotSettings:
+            slotSettingsCard
+        }
+    }
+
     // MARK: Connection
 
     private var connectionCard: some View {
@@ -146,14 +213,14 @@ struct NativeControlsScreen: View {
                 } label: {
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(midiActivity.events.isEmpty ? Theme.muted : Color(red: 1.0, green: 0.82, blue: 0.36))
+                            .fill(midiActivity.events.isEmpty ? Theme.muted : Theme.success)
                             .frame(width: 7, height: 7)
                         Text("Live Move Note / CC Log")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color.white)
                         Spacer()
                         if !midiActivity.events.isEmpty {
-                            Text("LIVE").font(.system(size: 9, weight: .heavy)).foregroundStyle(Theme.success)
+                            Text("MIDI ACTIVE").font(.system(size: 9, weight: .heavy)).foregroundStyle(Theme.success)
                         }
                     }
                 }
@@ -284,7 +351,7 @@ struct NativeControlsScreen: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            HStack(spacing: 5) {
+                            HStack(spacing: 8) {
                                 Button {
                                     remote.setComponentBypassed(
                                         component.rawValue,
@@ -303,11 +370,13 @@ struct NativeControlsScreen: View {
                                     selectedChainComponent = component
                                     showingClearConfirmation = true
                                 } label: {
-                                    Image(systemName: "xmark.circle")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .frame(width: 28, height: 25)
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(Theme.warning)
+                                        .frame(width: 30, height: 25)
+                                        .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
                                 }
-                                .buttonStyle(StudioSecondaryButton())
+                                .buttonStyle(.plain)
                                 .accessibilityLabel("Clear \(component.title)")
                                 .disabled(!remote.isConnected || moduleName == nil)
                             }
@@ -974,9 +1043,6 @@ struct DestinationSelector: View {
                             Text("\(Int((slotVolume(slot) * 100).rounded()))%")
                                 .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
                                 .foregroundStyle(slotVolume(slot) >= 1 ? Theme.accent : Theme.muted)
-                            Text("100% ref.")
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(Theme.muted)
                         }
                     }
                     .padding(.horizontal, 4)
