@@ -2,7 +2,7 @@
 
 **Branch:** `macos-app`  
 **Reference branch:** `v0.9-development`  
-**Latest verified source commit:** `76484c5`  
+**Latest verified source commit:** `76484c5` (newer source commits await Actions verification)  
 **Latest build/package result:** Actions run [#45 passed](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499). Physical app launch, UI behaviour and Move tests are still pending.
 
 Use this checklist when the MacBook and Ableton Move are available. Mark each item as Pass, Fail, or Not tested, and include the build number and Move/Schwung version for any failure.
@@ -30,6 +30,7 @@ Use this checklist when the MacBook and Ableton Move are available. Mark each it
 - [ ] Confirm status changes from Connecting to Connected and shows a useful loading/ready state.
 - [ ] Disconnect Wi-Fi or make the Move temporarily unavailable; confirm status is not falsely shown as connected.
 - [ ] Restore connectivity and confirm reconnect behaviour.
+- [ ] During disconnect/reconnect, confirm old volume, mute/solo and instrument labels are not presented as current; confirm values repopulate after fresh slot messages.
 - [ ] Change the Move address in app settings and confirm the old connection is closed before the new one opens.
 - [ ] Reappear/revisit SchwungTroller with the same address and confirm it does not open a duplicate WebSocket.
 - [ ] Confirm there is no repeated reconnect loop or duplicated event stream.
@@ -88,6 +89,7 @@ For each of Slots 1–4:
 ## Build tracking
 
 - Run #45 passed for commit `76484c5`, including the mixer model parity fix and earlier divider fix. Download the artifact associated with this run from [GitHub Actions](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40729549499).
+- Newer connection lifecycle and stale mixer-cache fixes are not build-verified until an Actions run for those commits passes.
 - Runs #39–#42 failed on two compile errors that are fixed in later commits. Run #43 targets an intermediate commit and may remain queued; it does not supersede the successful #45 build.
 - Check the [macos-app Actions page](https://github.com/chutneyrebel/schwung-pocket/actions?query=branch%3Amacos-app) for newer commits before downloading.
 - Build success validates compilation and packaging only. Sections B–H require runtime testing, and sections D–G require Move verification.
