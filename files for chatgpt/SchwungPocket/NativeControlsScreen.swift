@@ -76,28 +76,7 @@ struct NativeControlsScreen: View {
             VStack(alignment: .leading, spacing: 14) {
                 performanceStatusStrip
 
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(alignment: .center, spacing: 8) {
-                        Image(systemName: "slider.vertical.3")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Theme.accent)
-                        Text("PERFORMANCE MIXER")
-                            .font(.system(size: 10, weight: .heavy))
-                            .tracking(1.35)
-                            .foregroundStyle(Theme.muted)
-                        Spacer(minLength: 4)
-                        Text("0–400%")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
-                            .foregroundStyle(Theme.muted)
-                    }
-                    destinationCard
-                }
-                .padding(12)
-                .background(Theme.surface.opacity(0.58), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.045), lineWidth: 1)
-                }
+                destinationCard
 
                 ForEach(orderedSections.filter { $0 != .mixer }) { section in
                     if shouldShow(section) {
@@ -365,7 +344,20 @@ struct NativeControlsScreen: View {
 
     private var destinationCard: some View {
         PocketCard {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "slider.vertical.3")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Theme.accent)
+                    Text("PERFORMANCE MIXER")
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.35)
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    Text("0–400%")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Theme.muted)
+                }
                 HStack {
                     Text("REMOTE DESTINATION").font(.system(size: 10, weight: .heavy)).tracking(1.4).foregroundStyle(Theme.muted)
                     Spacer()
