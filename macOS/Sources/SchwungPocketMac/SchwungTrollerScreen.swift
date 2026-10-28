@@ -32,6 +32,14 @@ struct SchwungTrollerScreen: View {
                         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Theme.warning.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
                 }
+                if isSlotDestination {
+                    moduleSwapSection
+                } else if remote.destination == .masterFX {
+                    masterFXModuleSection
+                }
+                if !remote.levels.isEmpty {
+                    levelPicker
+                }
                 if case .error(let error) = remote.loadState {
                     infoCard("Could not load controls", detail: error)
                 } else if case .unsupported(let reason) = remote.loadState {
@@ -40,15 +48,6 @@ struct SchwungTrollerScreen: View {
                     infoCard("Waiting for metadata", detail: "Select a destination and wait for Schwung to report its parameter hierarchy. The app does not invent controls for unknown protocol fields.")
                 } else {
                     parameterSection
-                }
-                if isSlotDestination {
-                    slotSettings
-                    moduleSwapSection
-                } else if remote.destination == .masterFX {
-                    masterFXModuleSection
-                }
-                if !remote.levels.isEmpty {
-                    levelPicker
                 }
                 Spacer(minLength: 24)
             }
