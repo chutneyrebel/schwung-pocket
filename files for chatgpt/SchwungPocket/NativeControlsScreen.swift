@@ -36,7 +36,7 @@ private enum TrollerSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .connection: return "Connection & MIDI Activity"
-        case .mixer: return "Four-slot Mixer"
+        case .mixer: return "Performance Mixer"
         case .signalChain: return "Signal Chain & Installed Modules"
         case .parameters: return "Parameter Controls"
         case .slotSettings: return "Slot Settings"
@@ -64,8 +64,8 @@ struct NativeControlsScreen: View {
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
-    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "mixer,connection,signalChain,parameters,slotSettings"
-    @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = ""
+    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "mixer,signalChain,parameters,connection,slotSettings"
+    @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = "connection,signalChain,parameters,slotSettings"
 
     var body: some View {
         ModuleScreenShell(
@@ -231,8 +231,10 @@ struct NativeControlsScreen: View {
     }
 
     private var orderedSections: [TrollerSection] {
-        let saved = storedSectionOrder.split(separator: ",").compactMap { TrollerSection(rawValue: String($0)) }
-        return saved + TrollerSection.allCases.filter { !saved.contains($0) }
+        let saved = storedSectionOrder.split(separator: ",")
+            .compactMap { TrollerSection(rawValue: String($0)) }
+            .filter { $0 != .mixer }
+        return [.mixer] + saved + TrollerSection.allCases.filter { $0 != .mixer && !saved.contains($0) }
     }
 
     private var collapsedSections: Set<String> {
