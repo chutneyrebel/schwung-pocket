@@ -174,6 +174,14 @@ final class RemoteControlStore: ObservableObject {
 
     // MARK: Connection lifecycle
 
+    /// Avoids opening a second socket when the screen reappears with the same address.
+    func connectIfNeeded(address newAddress: String) {
+        let requestedAddress = newAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard connection == .disconnected || requestedAddress != currentAddress else { return }
+        connect(address: requestedAddress)
+    }
+
     func connect(address: String) {
         self.address = address
         wantsConnection = true
