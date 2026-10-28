@@ -69,43 +69,78 @@ struct NativeControlsScreen: View {
 
     var body: some View {
         ModuleScreenShell(
-            eyebrow: "SCHWUNG POCKET / MODULE",
+            eyebrow: "SCHWUNG POCKET / LIVE INSTRUMENT",
             title: "SchwungTroller",
-            subtitle: "Live knobs and switches built from the instrument's own metadata."
+            subtitle: "Four-slot performance control with a focused signal chain and live parameters."
         ) {
-            ForEach(orderedSections) { section in
-                if shouldShow(section) {
-                    DisclosureGroup(
-                        isExpanded: Binding(
-                            get: { !collapsedSections.contains(section.rawValue) },
-                            set: { expanded in setSection(section, expanded: expanded) }
-                        )
-                    ) {
-                        sectionContent(section)
-                            .padding(.top, 8)
-                    } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: section.symbol)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
-                                .frame(width: 22)
-                            Text(section.title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Spacer()
-                        }
+            VStack(alignment: .leading, spacing: 14) {
+                performanceStatusStrip
+
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .center, spacing: 8) {
+                        Image(systemName: "slider.vertical.3")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Theme.accent)
+                        Text("PERFORMANCE MIXER")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.35)
+                            .foregroundStyle(Theme.muted)
+                        Spacer(minLength: 4)
+                        Text("0–400%")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(Theme.muted)
                     }
-                    .tint(Theme.accent)
-                    .padding(13)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
+                    destinationCard
+                }
+                .padding(12)
+                .background(Theme.surface.opacity(0.58), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.045), lineWidth: 1)
+                }
+
+                ForEach(orderedSections.filter { $0 != .mixer }) { section in
+                    if shouldShow(section) {
+                        DisclosureGroup(
+                            isExpanded: Binding(
+                                get: { !collapsedSections.contains(section.rawValue) },
+                                set: { expanded in setSection(section, expanded: expanded) }
+                            )
+                        ) {
+                            sectionContent(section)
+                                .padding(.top, 9)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: section.symbol)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                    .frame(width: 22)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(section.title)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                    Text(sectionSummary(section))
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(Theme.muted)
+                                        .lineLimit(1)
+                                }
+                                Spacer(minLength: 4)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .tint(Theme.accent)
+                        .padding(13)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
+                        }
                     }
                 }
             }
         }
-         .onAppear {
+        .onAppear {
             remote.loadSlotModules(address: device.addressText)
             // The screen stays mounted after its first visit, so this is normally a no-op.
             // It reconnects only if the screen was disconnected or the Move address changed.
@@ -155,6 +190,67 @@ struct NativeControlsScreen: View {
         }
     }
 
+    private var performanceStatusStrip: some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+                .shadow(color: statusColor.opacity(remote.isConnected ? 0.35 : 0), radius: 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(remote.statusText.uppercased())
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(0.8)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(remote.isConnected ? "Move control link" : "Check your Move connection below")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            if !midiActivity.events.isEmpty {
+                HStack(spacing: 5) {
+                    Circle().fill(Theme.success).frame(width: 6, height: 6)
+                    Text("MIDI")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(0.7)
+                        .foregroundStyle(Theme.success)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(Theme.success.opacity(0.10), in: Capsule())
+                .transition(.scale.combined(with: .opacity))
+            }
+            Text(remote.destination.title.uppercased())
+                .font(.system(size: 9, weight: .heavy))
+                .tracking(0.6)
+                .foregroundStyle(Theme.accent)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(Theme.accent.opacity(0.10), in: Capsule())
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.05), lineWidth: 1)
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: remote.destination)
+        .animation(.easeOut(duration: 0.18), value: midiActivity.events.isEmpty)
+    }
+
+    private func sectionSummary(_ section: TrollerSection) -> String {
+        switch section {
+        case .connection: return "Link status and incoming MIDI"
+        case .mixer: return "Four independent slot levels"
+        case .signalChain: return isMasterFX ? "Master effect positions" : "Swap and manage modules"
+        case .parameters: return "Metadata-supported controls"
+        case .slotSettings: return "Current slot options"
+        }
+    }
+
     private var orderedSections: [TrollerSection] {
         let saved = storedSectionOrder.split(separator: ",").compactMap { TrollerSection(rawValue: String($0)) }
         return saved + TrollerSection.allCases.filter { !saved.contains($0) }
@@ -165,13 +261,15 @@ struct NativeControlsScreen: View {
     }
 
     private func setSection(_ section: TrollerSection, expanded: Bool) {
-        var collapsed = collapsedSections
-        if expanded { collapsed.remove(section.rawValue) }
-        else { collapsed.insert(section.rawValue) }
-        storedCollapsedSections = TrollerSection.allCases
-            .filter { collapsed.contains($0.rawValue) }
-            .map(\.rawValue)
-            .joined(separator: ",")
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+            var collapsed = collapsedSections
+            if expanded { collapsed.remove(section.rawValue) }
+            else { collapsed.insert(section.rawValue) }
+            storedCollapsedSections = TrollerSection.allCases
+                .filter { collapsed.contains($0.rawValue) }
+                .map(\.rawValue)
+                .joined(separator: ",")
+        }
     }
 
     private func shouldShow(_ section: TrollerSection) -> Bool {
