@@ -73,6 +73,7 @@ final class RemoteControlStore: ObservableObject {
     private var editingKeys = Set<String>()
     private var lastSent: [String: String] = [:]
     private var pendingMasterFXClears: [String: Date] = [:]
+    private var loadedModuleCatalogAddress: String?
 
     // MARK: Derived state
 
@@ -428,10 +429,17 @@ final class RemoteControlStore: ObservableObject {
     // MARK: Installed module discovery and hot-swap
 
     func loadSlotModules(address: String) {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Returning to SchwungTroller should not re-fetch the same module catalogue
+        // on every appearance. Those HTTP requests compete with live WebSocket control
+        // traffic on the Move's local network. Failed/empty catalogues remain retryable.
+        if loadedModuleCatalogAddress == trimmed, !availableSlotModules.isEmpty {
+            RemoteDiagnostics.log("reusing cached slot module catalogue for \(trimmed)")
+            return
+        }
         moduleCatalogTask?.cancel()
         isLoadingSlotModules = true
         slotModulesError = nil
-        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
         let input = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
         guard !trimmed.isEmpty,
               var addressComponents = URLComponents(string: input),
@@ -556,6 +564,7 @@ final class RemoteControlStore: ObservableObject {
                     let modules = catalogue.filter { $0.installed == true }
                     self?.availableSlotModules = modules
                     self?.slotModulesError = modules.isEmpty ? "Schwung returned no installed modules. Install a module in Schwung Manager first." : nil
+                    self?.loadedModuleCatalogAddress = modules.isEmpty ? nil : trimmed
                     RemoteDiagnostics.log("slot module catalogue loaded from \(url.absoluteString): \(catalogue.count) catalogue entries, \(modules.count) installed")
                     return
                 } catch {
