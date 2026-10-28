@@ -8,6 +8,8 @@ struct SchwungTrollerScreen: View {
     @State private var selectedComponent = "synth"
     @State private var showingModulePicker = false
     @State private var expandedSections: Set<String> = Set(["mixer", "chain", "modules", "parameters", "settings"])
+    @State private var showingMIDILog = false
+    @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
     private var currentComponent: String {
         remote.parameters.first?.component ?? selectedComponent
@@ -26,13 +28,34 @@ struct SchwungTrollerScreen: View {
                                 .buttonStyle(.bordered).disabled(remote.isConnected)
                         }
                         Text(device.baseAddress).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.muted)
-                        DisclosureGroup("MIDI Activity") {
-                            Text("MIDI activity is shown when incoming Note/CC events are exposed by the connected Schwung endpoint.")
-                                .font(.caption).foregroundStyle(Theme.muted).padding(.top, 6)
-                            HStack(spacing: 7) {
-                                Circle().fill(Theme.warning).frame(width: 8, height: 8)
-                                Text("MIDI INACTIVE").font(.system(size: 10, weight: .heavy)).foregroundStyle(Theme.warning)
-                            }.padding(.top, 4)
+                        DisclosureGroup(isExpanded: $showingMIDILog) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                if midiActivity.events.isEmpty {
+                                    Text("Play a note or move a MIDI control to see incoming activity.")
+                                        .font(.caption).foregroundStyle(Theme.muted)
+                                } else {
+                                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
+                                        Text(event)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(Theme.muted)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                            }.padding(.top, 6)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("MIDI Activity").font(.subheadline.weight(.medium))
+                                Spacer()
+                                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                                    let active = midiActivity.lastEventAt.map { context.date.timeIntervalSince($0) < 1.5 } ?? false
+                                    HStack(spacing: 6) {
+                                        Circle().fill(active ? Theme.success : Theme.warning).frame(width: 7, height: 7)
+                                        Text(active ? "MIDI ACTIVE" : "MIDI INACTIVE")
+                                            .font(.system(size: 9, weight: .heavy))
+                                            .foregroundStyle(active ? Theme.success : Theme.warning)
+                                    }
+                                }
+                            }
                         }
                     }.padding(.top, 8)
                 } label: { sectionLabel("Connection and MIDI Activity", symbol: "network") }
