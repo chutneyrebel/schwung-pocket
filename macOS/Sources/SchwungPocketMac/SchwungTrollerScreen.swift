@@ -17,6 +17,7 @@ struct SchwungTrollerScreen: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 destinationPicker
+                if isSlotDestination { slotChainPicker }
                 if remote.destination == .tool {
                     infoCard("Tool controls", detail: "Tool values are shown according to the metadata exposed by Schwung. Unsupported or read-only values are never sent as edits.")
                 }
@@ -162,7 +163,7 @@ struct SchwungTrollerScreen: View {
                 if remote.isLoadingSlotModules { ProgressView().controlSize(.small) }
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
-                ForEach(remote.visibleParameters) { parameter in
+                ForEach(displayedParameters) { parameter in
                     parameterControl(parameter)
                 }
             }
@@ -341,6 +342,51 @@ struct SchwungTrollerScreen: View {
         case .slot4: return 3
         case .masterFX, .tool: return nil
         }
+    }
+
+    private var slotChainPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("SLOT SIGNAL CHAIN").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(Theme.muted)
+                Spacer()
+                Button(remote.isComponentBypassed(selectedComponent) ? "Enable" : "Bypass") {
+                    remote.setComponentBypassed(selectedComponent, bypassed: !remote.isComponentBypassed(selectedComponent))
+                }.buttonStyle(.bordered).tint(Theme.accent)
+                    .disabled(!remote.isConnected || remote.componentNames[selectedComponent] == nil)
+                Button("Clear") { remote.clearSlotModule(component: selectedComponent) }
+                    .buttonStyle(.bordered).tint(Theme.warning)
+                    .disabled(!remote.isConnected || remote.componentNames[selectedComponent] == nil)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
+                ForEach((1...max(remote.midiFXCapacity, 1)).map { "midi_fx\\($0)" } + ["synth"] + (1...max(remote.audioFXCapacity, 1)).map { "fx\\($0)" }, id: \\.self) { component in
+                    let title = component == "synth" ? "Instrument" : component.replacingOccurrences(of: "_", with: " ").uppercased()
+                    let selected = selectedComponent == component
+                    Button { selectedComponent = component } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(title).font(.system(size: 12, weight: .bold))
+                            Text(remote.componentNames[component] ?? "Not loaded").font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).padding(10)
+                        .foregroundStyle(.white).background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+                        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1) }
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(16).background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var displayedParameters: [RemoteParameter] {
+        if remote.destination == .masterFX {
+            return remote.parameters.filter { $0.component == remote.selectedMasterFXComponent }
+                .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        }
+        if remote.destination == .tool { return [] }
+        if selectedComponent == "synth" {
+            return remote.visibleParameters.filter { $0.component == "synth" }
+        }
+        return remote.parameters.filter { $0.component == selectedComponent }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
     private var isSlotDestination: Bool {
