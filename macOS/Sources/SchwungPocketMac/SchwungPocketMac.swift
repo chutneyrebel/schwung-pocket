@@ -283,7 +283,7 @@ struct DeviceWebScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "link").foregroundStyle(.mint)
+                Image(systemName: "link").foregroundStyle(Theme.accent)
                 Text(url?.absoluteString ?? "Invalid device address")
                     .font(.system(.caption, design: .monospaced))
                     .lineLimit(1)
