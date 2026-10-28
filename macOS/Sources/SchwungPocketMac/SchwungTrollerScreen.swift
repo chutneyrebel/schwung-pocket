@@ -114,7 +114,7 @@ struct SchwungTrollerScreen: View {
                 HStack(spacing: 8) {
                     ForEach(0..<4, id: \.self) { slot in
                         VStack(spacing: 6) {
-                            Text("SLOT \(slot + 1)")
+                            Text(remote.slotInstrumentNames[slot] ?? "Slot \(slot + 1)")
                                 .font(.system(size: 9, weight: .heavy))
                                 .tracking(0.8)
                                 .foregroundStyle(Theme.muted)
