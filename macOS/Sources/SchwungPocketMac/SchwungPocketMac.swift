@@ -28,7 +28,7 @@ struct PocketWindow: View {
                 HStack(spacing: 10) {
                     Image(systemName: "waveform.path")
                         .font(.system(size: 23, weight: .semibold))
-                        .foregroundStyle(Color.mint)
+                        .foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("SCHWUNG").font(.system(size: 13, weight: .black, design: .rounded)).tracking(1.8)
                         Text("POCKET · MAC").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
@@ -47,7 +47,7 @@ struct PocketWindow: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(selection == section ? Color.mint : Color.primary.opacity(0.78))
+                    .foregroundStyle(selection == section ? Theme.accent : Color.primary.opacity(0.78))
                     .padding(.horizontal, 10)
                     .background(selection == section ? Color.white.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
                 }
@@ -61,7 +61,7 @@ struct PocketWindow: View {
             }
             .padding(10)
             .frame(minWidth: 205)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.55))
+            .background(Theme.background)
         } detail: {
             VStack(spacing: 0) {
                 HStack {
@@ -84,16 +84,16 @@ struct PocketWindow: View {
                 Group {
                     switch selection {
                     case .home: HomeScreen(device: device, open: { selection = $0 })
-                    case .mirror: DeviceWebScreen(url: device.endpoint("/remote-ui"), title: "Move Mirror")
+                    case .mirror: DeviceWebScreen(url: device.endpoint("/mirror"), title: "Mirror")
                     case .manager: DeviceWebScreen(url: device.endpoint("/"), title: "Schwung Manager")
                     case .files: DeviceWebScreen(url: device.endpoint("/files"), title: "Move Files")
-                    case .studio: StudioScreen(device: device)
+                    case .studio: SchwungTrollerScreen(device: device)
                     case .settings: SettingsScreen(device: device)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(Color(nsColor: .underPageBackgroundColor))
+            .background(Theme.background)
         }
         .navigationSplitViewStyle(.balanced)
         .task { await device.check() }
@@ -108,7 +108,7 @@ enum PocketSection: String, CaseIterable, Identifiable {
         case .home: "Overview"
         case .mirror: "Move Mirror"
         case .manager: "Schwung Manager"
-        case .studio: "Studio"
+        case .studio: "SchwungTroller"
         case .files: "Files"
         case .settings: "Connection"
         }
@@ -116,9 +116,9 @@ enum PocketSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .home: "square.grid.2x2"
-        case .mirror: "display"
+        case .mirror: "rectangle.inset.filled"
         case .manager: "slider.horizontal.3"
-        case .studio: "dial.low"
+        case .studio: "dial.medium"
         case .files: "folder"
         case .settings: "network"
         }
@@ -128,7 +128,7 @@ enum PocketSection: String, CaseIterable, Identifiable {
         case .home: "Your Move connection at a glance"
         case .mirror: "The device's remote interface"
         case .manager: "Native window into Schwung Manager"
-        case .studio: "A home for verified remote controls"
+        case .studio: "Live controls from Schwung metadata"
         case .files: "Files exposed by Schwung"
         case .settings: "Device address and connectivity"
         }
@@ -158,7 +158,7 @@ struct HomeScreen: View {
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient(colors: [Color.mint.opacity(0.15), Color.blue.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 18))
+                .background(LinearGradient(colors: [Theme.accent.opacity(0.13), Theme.blue.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 18))
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                     HomeTile(title: "Move Mirror", detail: "Open the Move remote interface", symbol: "display", action: { open(.mirror) })
@@ -192,7 +192,7 @@ struct HomeTile: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(Color.mint).frame(width: 42, height: 42).background(Color.mint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                Image(systemName: symbol).font(.system(size: 22)).foregroundStyle(Color.mint).frame(width: 42, height: 42).background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title).font(.headline).foregroundStyle(.primary)
                     Text(detail).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.leading)
@@ -235,7 +235,7 @@ struct StudioScreen: View {
                 }
                 Button("Open Schwung Manager") { if let url = device.endpoint("/") { NSWorkspace.shared.open(url) } }
                     .buttonStyle(.borderedProminent)
-                    .tint(.mint)
+                    .tint(Theme.accent)
             }
             .padding(28)
             .frame(maxWidth: 760, alignment: .leading)
