@@ -140,11 +140,16 @@ struct SchwungTrollerScreen: View {
             }
             switch parameter.kind {
             case .knob:
-                Slider(value: Binding(
-                    get: { remote.currentDouble(for: parameter) },
-                    set: { remote.setNumeric($0, for: parameter) }
-                ), in: parameter.minimum...max(parameter.maximum, parameter.minimum))
-                .tint(Theme.accent)
+                RotaryKnob(
+                    label: parameter.displayName,
+                    value: remote.currentDouble(for: parameter),
+                    range: parameter.minimum...max(parameter.maximum, parameter.minimum),
+                    step: parameter.safeStep,
+                    valueText: remote.displayValue(for: parameter),
+                    tint: Theme.accent,
+                    onChange: { remote.setNumeric($0, for: parameter) }
+                )
+                .frame(maxWidth: 150)
                 HStack {
                     Text(parameter.format(parameter.minimum))
                     Spacer()
