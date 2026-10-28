@@ -25,18 +25,6 @@ struct PocketWindow: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "waveform.path")
-                        .font(.system(size: 23, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("SCHWUNG").font(.system(size: 13, weight: .black, design: .rounded)).tracking(1.8)
-                        Text("POCKET · MAC").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 18)
-                .padding(.horizontal, 12)
-
                 ForEach(PocketSection.allCases) { section in
                     Button {
                         selection = section
