@@ -8,6 +8,7 @@ struct SchwungTrollerScreen: View {
     @State private var selectedComponent = "synth"
     @State private var showingModulePicker = false
     @State private var expandedSections: Set<String> = Set(["mixer", "chain", "modules", "parameters", "settings"])
+    @AppStorage("SchwungPocketMac.TrollerSectionOrder.v1") private var storedSectionOrder = "connection,mixer,chain,modules,parameters,settings"
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
@@ -18,95 +19,10 @@ struct SchwungTrollerScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                DisclosureGroup(isExpanded: expansion("connection")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            Circle().fill(remote.isConnected ? Theme.success : Theme.warning).frame(width: 9, height: 9)
-                            Text(remote.statusText).font(.callout.weight(.medium))
-                            Spacer()
-                            Button("Reconnect") { remote.disconnect(); remote.connect(address: device.baseAddress) }
-                                .buttonStyle(.bordered).disabled(remote.isConnected)
-                        }
-                        Text(device.baseAddress).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.muted)
-                        DisclosureGroup(isExpanded: $showingMIDILog) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                if midiActivity.events.isEmpty {
-                                    Text("Play a note or move a MIDI control to see incoming activity.")
-                                        .font(.caption).foregroundStyle(Theme.muted)
-                                } else {
-                                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
-                                        Text(event)
-                                            .font(.system(size: 11, design: .monospaced))
-                                            .foregroundStyle(Theme.muted)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                            }.padding(.top, 6)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Text("MIDI Activity").font(.subheadline.weight(.medium))
-                                Spacer()
-                                TimelineView(.periodic(from: .now, by: 0.5)) { context in
-                                    let active = midiActivity.lastEventAt.map { context.date.timeIntervalSince($0) < 1.5 } ?? false
-                                    HStack(spacing: 6) {
-                                        Circle().fill(active ? Theme.success : Theme.warning).frame(width: 7, height: 7)
-                                        Text(active ? "MIDI ACTIVE" : "MIDI INACTIVE")
-                                            .font(.system(size: 9, weight: .heavy))
-                                            .foregroundStyle(active ? Theme.success : Theme.warning)
-                                    }
-                                }
-                            }
-                        }
-                    }.padding(.top, 8)
-                } label: { sectionLabel("Connection and MIDI Activity", symbol: "network") }
-                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-
                 destinationPicker
-
-                DisclosureGroup(isExpanded: expansion("mixer")) {
-                    fourSlotMixer.padding(.top, 10)
-                } label: { sectionLabel("Four-slot Mixer", symbol: "slider.vertical.3") }
-                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-
-                if isSlotDestination {
-                    DisclosureGroup(isExpanded: expansion("chain")) {
-                        slotChainPicker.padding(.top, 10)
-                    } label: { sectionLabel("Signal Chain", symbol: "point.3.connected.trianglepath.dotted") }
-                        .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                    DisclosureGroup(isExpanded: expansion("modules")) {
-                        moduleSwapSection.padding(.top, 10)
-                    } label: { sectionLabel("Installed Modules", symbol: "square.stack.3d.up") }
-                        .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                } else if remote.destination == .masterFX { masterFXModuleSection }
-
-                if remote.destination == .tool {
-                    infoCard("Tool controls", detail: "Tool values are shown according to the metadata exposed by Schwung. Unsupported or read-only values are never sent as edits.")
+                ForEach(orderedSectionKeys, id: \.self) { key in
+                    sectionView(key)
                 }
-                if remote.destination == .masterFX {
-                    infoCard("Master FX", detail: "Uses the dedicated Master FX messages and the DSP path discovery/hot-swap logic ported from v0.8.3-development.")
-                }
-                if remote.isLoadingSlotModules {
-                    HStack(spacing: 10) { ProgressView(); Text("Discovering installed modules…").foregroundStyle(Theme.muted) }
-                }
-                if let error = remote.slotModulesError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Theme.warning)
-                        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.warning.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
-                }
-                DisclosureGroup(isExpanded: expansion("parameters")) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !remote.levels.isEmpty { levelPicker }
-                        if case .error(let error) = remote.loadState { infoCard("Could not load controls", detail: error) }
-                        else if case .unsupported(let reason) = remote.loadState { infoCard("Controls unavailable", detail: reason) }
-                        else if remote.parameters.isEmpty { infoCard("Waiting for metadata", detail: "Select a destination and wait for Schwung to report its parameter hierarchy. The app does not invent controls for unknown protocol fields.") }
-                        else { parameterSection }
-                    }.padding(.top, 10)
-                } label: { sectionLabel("Parameter Controls", symbol: "dial.low") }
-                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                DisclosureGroup(isExpanded: expansion("settings")) {
-                    slotSettings.padding(.top, 10)
-                } label: { sectionLabel("Slot Settings", symbol: "gearshape") }
-                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
                 Spacer(minLength: 24)
             }.padding(20).frame(maxWidth: 1180, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -114,6 +30,159 @@ struct SchwungTrollerScreen: View {
         .onAppear { remote.loadSlotModules(address: device.baseAddress); if remote.connection == .disconnected { remote.connect(address: device.baseAddress) } }
         .onChange(of: device.baseAddress) { address in remote.disconnect(); remote.loadSlotModules(address: address); remote.connect(address: address) }
         .onDisappear { remote.disconnect() }
+    }
+
+    private var orderedSectionKeys: [String] {
+        let allowed = ["connection", "mixer", "chain", "modules", "parameters", "settings"]
+        let saved = storedSectionOrder.split(separator: ",").map(String.init).filter { allowed.contains($0) }
+        return saved + allowed.filter { !saved.contains($0) }
+    }
+
+    @ViewBuilder
+    private func sectionView(_ key: String) -> some View {
+        switch key {
+        case "connection":
+            DisclosureGroup(isExpanded: expansion("connection")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Circle().fill(remote.isConnected ? Theme.success : Theme.warning).frame(width: 9, height: 9)
+                        Text(remote.statusText).font(.callout.weight(.medium))
+                        Spacer()
+                        Button("Reconnect") { remote.disconnect(); remote.connect(address: device.baseAddress) }
+                            .buttonStyle(.bordered).disabled(remote.isConnected)
+                    }
+                    Text(device.baseAddress).font(.system(.caption, design: .monospaced)).foregroundStyle(Theme.muted)
+                    midiActivityPanel
+                }.padding(.top, 8)
+            } label: { sectionLabel("Connection and MIDI Activity", symbol: "network") }
+                .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        case "mixer":
+            DisclosureGroup(isExpanded: expansion("mixer")) {
+                fourSlotMixer.padding(.top, 10)
+            } label: { sectionLabel("Four-slot Mixer", symbol: "slider.vertical.3") }
+                .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        case "chain":
+            if isSlotDestination {
+                DisclosureGroup(isExpanded: expansion("chain")) {
+                    slotChainPicker.padding(.top, 10)
+                } label: { sectionLabel("Signal Chain", symbol: "point.3.connected.trianglepath.dotted") }
+                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+            } else if remote.destination == .masterFX {
+                masterFXModuleSection
+            }
+        case "modules":
+            if isSlotDestination {
+                DisclosureGroup(isExpanded: expansion("modules")) {
+                    moduleSwapSection.padding(.top, 10)
+                } label: { sectionLabel("Installed Modules", symbol: "square.stack.3d.up") }
+                    .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+            }
+        case "parameters":
+            if remote.destination == .tool {
+                infoCard("Tool controls", detail: "Tool values are shown according to the metadata exposed by Schwung. Unsupported or read-only values are never sent as edits.")
+            }
+            if remote.destination == .masterFX {
+                infoCard("Master FX", detail: "Uses the dedicated Master FX messages and the DSP path discovery/hot-swap logic ported from v0.8.3-development.")
+            }
+            if remote.isLoadingSlotModules {
+                HStack(spacing: 10) { ProgressView(); Text("Discovering installed modules…").foregroundStyle(Theme.muted) }
+            }
+            if let error = remote.slotModulesError {
+                Label(error, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Theme.warning)
+                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.warning.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
+            }
+            DisclosureGroup(isExpanded: expansion("parameters")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !remote.levels.isEmpty { levelPicker }
+                    if case .error(let error) = remote.loadState { infoCard("Could not load controls", detail: error) }
+                    else if case .unsupported(let reason) = remote.loadState { infoCard("Controls unavailable", detail: reason) }
+                    else if remote.parameters.isEmpty { infoCard("Waiting for metadata", detail: "Select a destination and wait for Schwung to report its parameter hierarchy. The app does not invent controls for unknown protocol fields.") }
+                    else { parameterSection }
+                }.padding(.top, 10)
+            } label: { sectionLabel("Parameter Controls", symbol: "dial.low") }
+                .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        case "settings":
+            DisclosureGroup(isExpanded: expansion("settings")) {
+                VStack(alignment: .leading, spacing: 14) {
+                    slotSettings
+                    sectionOrderControls
+                }.padding(.top, 10)
+            } label: { sectionLabel("Slot Settings and Section Order", symbol: "gearshape") }
+                .padding(14).background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        default:
+            EmptyView()
+        }
+    }
+
+    private var midiActivityPanel: some View {
+        DisclosureGroup(isExpanded: $showingMIDILog) {
+            VStack(alignment: .leading, spacing: 6) {
+                if midiActivity.events.isEmpty {
+                    Text("Play a note or move a MIDI control to see incoming activity.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                } else {
+                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
+                        Text(event).font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Theme.muted).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }.padding(.top, 6)
+        } label: {
+            HStack(spacing: 8) {
+                Text("MIDI Activity").font(.subheadline.weight(.medium))
+                Spacer()
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    let active = midiActivity.lastEventAt.map { context.date.timeIntervalSince($0) < 1.5 } ?? false
+                    HStack(spacing: 6) {
+                        Circle().fill(active ? Theme.success : Theme.warning).frame(width: 7, height: 7)
+                        Text(active ? "MIDI ACTIVE" : "MIDI INACTIVE")
+                            .font(.system(size: 9, weight: .heavy))
+                            .foregroundStyle(active ? Theme.success : Theme.warning)
+                    }
+                }
+            }
+        }
+    }
+
+    private var sectionOrderControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("SECTION ORDER").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(Theme.muted)
+            Text("Use the arrows to choose the order of the SchwungTroller panels. Your choice is saved on this Mac.")
+                .font(.caption).foregroundStyle(Theme.muted)
+            ForEach(Array(orderedSectionKeys.enumerated()), id: \.element) { index, key in
+                HStack(spacing: 10) {
+                    Text(sectionTitle(for: key)).font(.callout.weight(.medium))
+                    Spacer()
+                    Button { moveSection(key, offset: -1) } label: {
+                        Image(systemName: "arrow.up").frame(width: 24, height: 24)
+                    }.buttonStyle(.bordered).disabled(index == 0)
+                    Button { moveSection(key, offset: 1) } label: {
+                        Image(systemName: "arrow.down").frame(width: 24, height: 24)
+                    }.buttonStyle(.bordered).disabled(index == orderedSectionKeys.count - 1)
+                }
+            }
+        }.padding(12).background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func sectionTitle(for key: String) -> String {
+        switch key {
+        case "connection": "Connection and MIDI Activity"
+        case "mixer": "Four-slot Mixer"
+        case "chain": "Signal Chain"
+        case "modules": "Installed Modules"
+        case "parameters": "Parameter Controls"
+        default: "Slot Settings and Section Order"
+        }
+    }
+
+    private func moveSection(_ key: String, offset: Int) {
+        var order = orderedSectionKeys
+        guard let index = order.firstIndex(of: key) else { return }
+        let target = index + offset
+        guard order.indices.contains(target) else { return }
+        order.swapAt(index, target)
+        storedSectionOrder = order.joined(separator: ",")
     }
 
     private func expansion(_ key: String) -> Binding<Bool> {
