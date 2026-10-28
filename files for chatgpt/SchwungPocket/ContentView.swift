@@ -43,7 +43,8 @@ private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
         }
     }
 }
-\nstruct ContentView: View {
+
+struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
     @State private var selectedTab: PocketTab = .home
     @State private var selectedStudioModule: PocketStudioModule?
@@ -1745,7 +1746,7 @@ private struct ConnectionSettingsScreen: View {
         guard sections.indices.contains(index), sections.indices.contains(destination) else { return }
         let item = sections.remove(at: index)
         sections.insert(item, at: destination)
-        storedTrollerSectionOrder = sections.map(\\.rawValue).joined(separator: ",")
+        storedTrollerSectionOrder = sections.map(\.rawValue).joined(separator: ",")
     }
 
     private var savedMoves: [SavedMoveProfile] {
@@ -1998,7 +1999,7 @@ private struct ConnectionSettingsScreen: View {
                             Text("Arrange the sections in the order that works best for your performance workflow. Changes are saved automatically.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.muted)
-                            ForEach(Array(orderedTrollerSections.enumerated()), id: \\.element.id) { item in
+                            ForEach(Array(orderedTrollerSections.enumerated()), id: \.element.id) { item in
                                 let index = item.offset
                                 let section = item.element
                                 HStack(spacing: 9) {
