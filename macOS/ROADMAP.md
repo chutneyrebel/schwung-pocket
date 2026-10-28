@@ -72,7 +72,7 @@
 |---|---|---|
 | SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Order and expanded/collapsed state implemented with `@AppStorage`; combined source build/runtime verification pending |
 | Live MIDI event bridge and activity log | `ManagerWebView.swift` + `NativeControlsScreen.swift` on `v0.9-development` | Bridge/store/UI implemented; build #34 passed for bridge commit; later UI build pending; runtime/Move verification pending |
-| Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Mac has retry backoff, generation guards and load timeout; address/view lifecycle parity still needs review and runtime verification |
+| Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Mac has retry backoff, generation guards, load timeout and `connectIfNeeded` parity; runtime reconnect/address-change verification pending |
 | Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Optional volume field aligned with iOS; finite volume validation retained; physical mixer and subscription refresh need testing |
 | Release notes and protocol support details | `RELEASE_NOTES.md` on `v0.9-development` | Review on each sync |
 
