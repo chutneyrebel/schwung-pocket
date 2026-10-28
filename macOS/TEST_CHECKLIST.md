@@ -31,6 +31,7 @@ Use this checklist when the MacBook and Ableton Move are available. Mark each it
 - [ ] Disconnect Wi-Fi or make the Move temporarily unavailable; confirm status is not falsely shown as connected.
 - [ ] Restore connectivity and confirm reconnect behaviour.
 - [ ] Change the Move address in app settings and confirm the old connection is closed before the new one opens.
+- [ ] Reappear/revisit SchwungTroller with the same address and confirm it does not open a duplicate WebSocket.
 - [ ] Confirm there is no repeated reconnect loop or duplicated event stream.
 
 ## D. Live MIDI activity bridge
