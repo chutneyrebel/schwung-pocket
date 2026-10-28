@@ -1003,46 +1003,34 @@ struct DestinationSelector: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(slotInstrumentNames[slot] ?? "Slot \(slot + 1)")
-                        HStack(spacing: 3) {
+                        VerticalVolumeSlider(
+                            value: Binding(
+                                get: { slotVolume(slot) },
+                                set: { onVolumeChange(slot, $0) }
+                            ),
+                            isEnabled: isConnected
+                        )
+                        .frame(height: 100)
+                        Text("\(Int((slotVolume(slot) * 100).rounded()))%")
+                            .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(slotVolume(slot) >= 1 ? Theme.accent : Theme.muted)
+                        HStack(spacing: 5) {
                             Button { onMuteToggle(slot, !isMuted(slot)) } label: {
-                                Text("M").font(.system(size: 9, weight: .heavy))
-                                    .frame(maxWidth: .infinity, minHeight: 21)
+                                Text("M").font(.system(size: 10, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 23)
                                     .foregroundStyle(isMuted(slot) ? Color.white : Theme.muted)
-                                    .background(isMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 5))
+                                    .background(isMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Slot \(slot + 1) mute")
                             Button { onSoloToggle(slot, !isSoloed(slot)) } label: {
-                                Text("S").font(.system(size: 9, weight: .heavy))
-                                    .frame(maxWidth: .infinity, minHeight: 21)
+                                Text("S").font(.system(size: 10, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 23)
                                     .foregroundStyle(isSoloed(slot) ? Theme.background : Theme.muted)
-                                    .background(isSoloed(slot) ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 5))
+                                    .background(isSoloed(slot) ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
-                        }
-                        VStack(spacing: 2) {
-                            GeometryReader { geometry in
-                                ZStack(alignment: .leading) {
-                                    Slider(
-                                        value: Binding(
-                                            get: { slotVolume(slot) },
-                                            set: { onVolumeChange(slot, $0) }
-                                        ),
-                                        in: 0...4,
-                                        step: 0.05
-                                    )
-                                    .tint(Theme.accent)
-                                    Rectangle()
-                                        .fill(Color.white.opacity(0.85))
-                                        .frame(width: 1.5, height: 20)
-                                        .offset(x: max(0, geometry.size.width * 0.25 - 0.75), y: 0)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            .frame(height: 23)
-                            .disabled(!isConnected)
-                            Text("\(Int((slotVolume(slot) * 100).rounded()))%")
-                                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
-                                .foregroundStyle(slotVolume(slot) >= 1 ? Theme.accent : Theme.muted)
+                            .accessibilityLabel("Slot \(slot + 1) solo")
                         }
                     }
                     .padding(.horizontal, 4)
@@ -1075,6 +1063,67 @@ struct DestinationSelector: View {
         }
     }
 }
+
+private struct VerticalVolumeSlider: View {
+    @Binding var value: Double
+    let isEnabled: Bool
+
+    var body: some View {
+        GeometryReader { geometry in
+            let height = max(geometry.size.height - 12, 1)
+            let normalized = min(max(value / 4, 0), 1)
+            let thumbY = 6 + (1 - normalized) * height
+            ZStack(alignment: .topLeading) {
+                Capsule()
+                    .fill(Theme.surfaceRaised)
+                    .frame(width: 7, height: height)
+                    .position(x: geometry.size.width / 2, y: 6 + height / 2)
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 7, height: max(2, normalized * height))
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: 6 + height - max(2, normalized * height) / 2
+                    )
+                Rectangle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 22, height: 2)
+                    .position(x: geometry.size.width / 2, y: 6 + height * 0.75)
+                    .allowsHitTesting(false)
+                Circle()
+                    .fill(Theme.accent)
+                    .frame(width: 18, height: 18)
+                    .overlay(Circle().strokeBorder(Theme.background, lineWidth: 2))
+                    .position(x: geometry.size.width / 2, y: thumbY)
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        guard isEnabled else { return }
+                        let fraction = min(max(1 - ((drag.location.y - 6) / height), 0), 1)
+                        let stepped = (fraction * 4 / 0.05).rounded() * 0.05
+                        value = min(max(stepped, 0), 4)
+                    }
+            )
+            .opacity(isEnabled ? 1 : 0.45)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Slot volume")
+        .accessibilityValue("\(Int((value * 100).rounded())) percent")
+        .accessibilityAdjustableAction { direction in
+            guard isEnabled else { return }
+            switch direction {
+            case .increment: value = min(4, value + 0.05)
+            case .decrement: value = max(0, value - 0.05)
+            @unknown default: break
+            }
+        }
+    }
+}
+
 
 private struct ModuleSwapSheet: View {
     @ObservedObject var remote: RemoteControlStore
