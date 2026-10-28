@@ -30,6 +30,29 @@ private struct SchwungChainComponent: Identifiable, Hashable {
     }
 }
 
+private enum TrollerSection: String, CaseIterable, Identifiable {
+    case connection, mixer, signalChain, parameters, slotSettings
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .connection: return "Connection & MIDI Activity"
+        case .mixer: return "Four-slot Mixer"
+        case .signalChain: return "Signal Chain & Installed Modules"
+        case .parameters: return "Parameter Controls"
+        case .slotSettings: return "Slot Settings"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .connection: return "dot.radiowaves.left.and.right"
+        case .mixer: return "slider.vertical.3"
+        case .signalChain: return "point.3.connected.trianglepath.dotted"
+        case .parameters: return "dial.low"
+        case .slotSettings: return "gearshape"
+        }
+    }
+}
+
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
