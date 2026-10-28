@@ -44,6 +44,8 @@ struct SchwungTrollerScreen: View {
                 if isSlotDestination {
                     slotSettings
                     moduleSwapSection
+                } else if remote.destination == .masterFX {
+                    masterFXModuleSection
                 }
                 if !remote.levels.isEmpty {
                     levelPicker
@@ -111,16 +113,16 @@ struct SchwungTrollerScreen: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(remote.instrumentName.isEmpty ? remote.destination.title : remote.instrumentName)
+                    Text(remote.currentLevelName.isEmpty ? remote.destination.title : remote.currentLevelName)
                         .font(.headline)
-                    Text("\(remote.parameters.count) parameters · \(remote.levels.count) levels")
+                    Text("\(remote.visibleParameters.count) parameters · \(remote.levels.count) levels")
                         .font(.caption).foregroundStyle(Theme.muted)
                 }
                 Spacer()
                 if remote.isLoadingSlotModules { ProgressView().controlSize(.small) }
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
-                ForEach(remote.parameters) { parameter in
+                ForEach(remote.visibleParameters) { parameter in
                     parameterControl(parameter)
                 }
             }
@@ -225,6 +227,44 @@ struct SchwungTrollerScreen: View {
                     }
                 }
             }
+        }
+        .padding(16).background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var masterFXModuleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Master FX chain").font(.headline)
+                    Text("Choose a chain position, then swap an installed audio effect.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Button("Refresh") { remote.loadSlotModules(address: device.baseAddress) }
+                    .buttonStyle(.bordered).tint(Theme.accent)
+            }
+            Picker("Effect position", selection: $remote.selectedMasterFXComponent) {
+                ForEach(1...max(remote.masterFXCapacity, 4), id: \.self) { index in
+                    Text("FX \(index)").tag("master_fx:fx\(index)")
+                }
+            }.pickerStyle(.segmented)
+            let effects = remote.availableSlotModules.filter { $0.componentType == "audio_fx" && !$0.deviceOnly }
+            if effects.isEmpty {
+                Text("No compatible audio effects discovered yet.")
+                    .font(.callout).foregroundStyle(Theme.muted)
+            } else {
+                Menu("Swap selected effect…") {
+                    ForEach(effects) { module in
+                        Button(module.name) {
+                            remote.swapMasterFXModule(component: remote.selectedMasterFXComponent, moduleID: module.id)
+                        }
+                    }
+                }.tint(Theme.accent)
+            }
+            Button("Clear selected effect") {
+                remote.clearMasterFXModule(component: remote.selectedMasterFXComponent)
+            }
+            .buttonStyle(.bordered).tint(Theme.warning)
         }
         .padding(16).background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
     }
