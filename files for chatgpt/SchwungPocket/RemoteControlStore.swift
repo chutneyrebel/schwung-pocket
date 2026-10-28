@@ -902,8 +902,15 @@ final class RemoteControlStore: ObservableObject {
         return min(max(raw, 0), 4)
     }
 
-    var slotMuted: Bool { values["slot:muted"] == "1" }
-    var slotSoloed: Bool { values["slot:soloed"] == "1" }
+    var slotMuted: Bool {
+        let value = values["slot:muted"]?.lowercased()
+        return value == "1" || value == "true" || value == "yes"
+    }
+
+    var slotSoloed: Bool {
+        let value = values["slot:soloed"]?.lowercased()
+        return value == "1" || value == "true" || value == "yes"
+    }
 
     func isSlotMuted(_ wireSlot: Int) -> Bool {
         slotMixStates[wireSlot]?.muted ?? false
