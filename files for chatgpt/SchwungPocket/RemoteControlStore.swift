@@ -73,6 +73,8 @@ final class RemoteControlStore: ObservableObject {
     private var editingKeys = Set<String>()
     private var lastSent: [String: String] = [:]
     private var pendingMasterFXClears: [String: Date] = [:]
+    private var mixerSubscriptionTask: Task<Void, Never>?
+    private var mixerSubscriptionSentSlots = Set<Int>()
     private var loadedModuleCatalogAddress: String?
 
     // MARK: Derived state
@@ -232,6 +234,9 @@ final class RemoteControlStore: ObservableObject {
     /// Invalidates the old socket (any in-flight callbacks see a stale generation and bail out).
     private func tearDownSocket() {
         connectionGeneration += 1
+        mixerSubscriptionTask?.cancel()
+        mixerSubscriptionTask = nil
+        mixerSubscriptionSentSlots.removeAll()
         receiveTask?.cancel()
         receiveTask = nil
         socket?.cancel(with: .goingAway, reason: nil)
@@ -247,6 +252,7 @@ final class RemoteControlStore: ObservableObject {
             case .slot(let slot):
                 activeSlot = slot
                 try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": slot])))
+                mixerSubscriptionSentSlots.insert(slot)
                 guard generation == connectionGeneration else { return }
                 beginLoading()
             case .masterFX:
@@ -267,20 +273,10 @@ final class RemoteControlStore: ObservableObject {
             connection = .connected
             retryAttempt = 0
 
-            // Mixer tiles are secondary to the selected destination. Subscribe
-            // after the receive loop starts so their setup cannot delay the UI.
-            Task { [weak self] in
-                for subscribedSlot in 0...3 where subscribedSlot != activeSlot {
-                    guard !Task.isCancelled,
-                          await self?.isCurrentGeneration(generation) == true else { return }
-                    do {
-                        try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": subscribedSlot])))
-                    } catch {
-                        RemoteDiagnostics.log("background mixer subscription failed for slot \(subscribedSlot): \(error.localizedDescription)")
-                        return
-                    }
-                }
-            }
+            // Mixer tiles are secondary to the selected destination. Queue their
+            // subscriptions gradually rather than placing three expensive full-slot
+            // reads behind the active slot. A destination change cancels this queue.
+            startBackgroundMixerSubscriptions(task: task, generation: generation, activeSlot: activeSlot)
 
             while !Task.isCancelled {
                 let message = try await task.receive()
@@ -326,6 +322,8 @@ final class RemoteControlStore: ObservableObject {
 
     func select(_ newDestination: RemoteDestination) {
         guard newDestination != destination else { return }
+        mixerSubscriptionTask?.cancel()
+        mixerSubscriptionTask = nil
 
         // Schwung's Remote UI explicitly supports these unsubscribe messages.
         // Release the global Master FX / Tool subscriptions when leaving them;
@@ -358,6 +356,13 @@ final class RemoteControlStore: ObservableObject {
         case .tool:
             if isConnected { beginLoading(); send(["type": "subscribe_tool"]) } else { loadState = .idle }
             startToolRefreshLoop()
+        }
+        if isConnected, let task = socket {
+            startBackgroundMixerSubscriptions(
+                task: task,
+                generation: connectionGeneration,
+                activeSlot: { if case .slot(let slot) = wireTarget { return slot }; return nil }()
+            )
         }
     }
 
@@ -392,7 +397,35 @@ final class RemoteControlStore: ObservableObject {
 
     private func subscribe(slot: Int) {
         beginLoading()
+        mixerSubscriptionSentSlots.insert(slot)
         send(["type": "subscribe", "slot": slot])
+    }
+
+    /// Subscribe to non-selected slots one at a time. Schwung handles a full slot
+    /// subscription synchronously and can spend several seconds reading module
+    /// parameters, so queueing all four at once delays later user selections.
+    private func startBackgroundMixerSubscriptions(
+        task: URLSessionWebSocketTask,
+        generation: Int,
+        activeSlot: Int?
+    ) {
+        mixerSubscriptionTask?.cancel()
+        mixerSubscriptionTask = Task { [weak self] in
+            for slot in 0...3 where slot != activeSlot {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard !Task.isCancelled, let self,
+                      self.isCurrentGeneration(generation) else { return }
+                guard !self.mixerSubscriptionSentSlots.contains(slot) else { continue }
+                do {
+                    try await task.send(.string(Self.jsonString(["type": "subscribe", "slot": slot])))
+                    guard !Task.isCancelled, self.isCurrentGeneration(generation) else { return }
+                    self.mixerSubscriptionSentSlots.insert(slot)
+                } catch {
+                    RemoteDiagnostics.log("background mixer subscription failed for slot \(slot): \(error.localizedDescription)")
+                    return
+                }
+            }
+        }
     }
 
     private func beginLoading() {
