@@ -72,8 +72,6 @@ struct SchwungTrollerScreen: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("SCHWUNG POCKET / MODULE")
-                    .font(.system(size: 10, weight: .heavy)).tracking(1.8).foregroundStyle(Theme.accent)
                 Text("SchwungTroller").font(.system(size: 27, weight: .bold, design: .rounded))
                 Text("Live knobs and switches built from the instrument’s own metadata.")
                     .foregroundStyle(Theme.muted)
@@ -153,15 +151,24 @@ struct SchwungTrollerScreen: View {
                     Text(parameter.format(parameter.maximum))
                 }.font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
             case .choice:
-                Picker(parameter.displayName, selection: Binding(
-                    get: { remote.currentChoiceIndex(for: parameter) },
-                    set: { remote.setChoice($0, for: parameter) }
-                )) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 6)], spacing: 6) {
                     ForEach(Array(parameter.options.enumerated()), id: \.offset) { index, option in
-                        Text(option).tag(index)
+                        let selected = remote.currentChoiceIndex(for: parameter) == index
+                        Button {
+                            remote.setChoice(index, for: parameter)
+                        } label: {
+                            Text(option)
+                                .font(.system(size: 11, weight: .semibold))
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, minHeight: 32)
+                                .padding(.horizontal, 7)
+                                .foregroundStyle(selected ? Theme.background : Color.white)
+                                .background(selected ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .labelsHidden().pickerStyle(.menu).tint(Theme.accent)
             case .readOnly(let reason):
                 Text(reason).font(.caption).foregroundStyle(Theme.muted)
             }
