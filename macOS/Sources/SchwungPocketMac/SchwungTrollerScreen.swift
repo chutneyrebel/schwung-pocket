@@ -66,7 +66,7 @@ struct SchwungTrollerScreen: View {
                 DisclosureGroup(isExpanded: expansion("chain")) {
                     VStack(alignment: .leading, spacing: 14) {
                         slotChainPicker
-                        Divider().overlay(Theme.border)
+                        Divider().overlay(Color.white.opacity(0.06))
                         moduleSwapSection
                     }.padding(.top, 10)
                 } label: { sectionLabel("Signal Chain and Modules", symbol: "point.3.connected.trianglepath.dotted") }
