@@ -27,8 +27,8 @@ struct SchwungTrollerScreen: View {
             }.padding(20).frame(maxWidth: 1180, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(Theme.background)
-        .onAppear { remote.loadSlotModules(address: device.baseAddress); if remote.connection == .disconnected { remote.connect(address: device.baseAddress) } }
-        .onChange(of: device.baseAddress) { address in remote.disconnect(); remote.loadSlotModules(address: address); remote.connect(address: address) }
+        .onAppear { remote.loadSlotModules(address: device.baseAddress); remote.connectIfNeeded(address: device.baseAddress) }
+        .onChange(of: device.baseAddress) { address in remote.loadSlotModules(address: address); remote.connectIfNeeded(address: address) }
         .onDisappear { remote.disconnect() }
     }
 
