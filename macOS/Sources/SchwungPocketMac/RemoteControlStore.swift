@@ -971,7 +971,6 @@ final class RemoteControlStore: ObservableObject {
             if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
             if key == "slot:volume", let raw = Double(text), raw.isFinite {
                 let clamped = min(max(raw, 0), 4)
-                state.volume = clamped
                 slotVolumes[slot] = clamped
             }
         }
