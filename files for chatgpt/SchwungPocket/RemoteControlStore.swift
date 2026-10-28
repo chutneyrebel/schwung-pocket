@@ -649,6 +649,23 @@ final class RemoteControlStore: ObservableObject {
         RemoteDiagnostics.log("Requested module bypass: destination=\(destination.title) component=\(component) bypassed=\(bypassed)")
     }
 
+    /// Accept array responses and common object wrappers from different Schwung builds.
+    /// Individual entries remain untyped so one incomplete module cannot invalidate the list.
+    private static func moduleEntryDictionaries(from json: Any) -> [[String: Any]]? {
+        if let array = json as? [Any] {
+            let entries = array.compactMap { $0 as? [String: Any] }
+            return entries.isEmpty ? nil : entries
+        }
+        guard let object = json as? [String: Any] else { return nil }
+        for key in ["modules", "slot_modules", "slotModules", "items", "data", "results"] {
+            if let nested = object.first(where: { $0.key.caseInsensitiveCompare(key) == .orderedSame })?.value,
+               let entries = moduleEntryDictionaries(from: nested), !entries.isEmpty {
+                return entries
+            }
+        }
+        return nil
+    }
+
     func swapMasterFXModule(component: String, moduleID: String) {
         guard isConnected, case .masterFX = wireTarget else { return }
         guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
@@ -707,26 +724,53 @@ final class RemoteControlStore: ObservableObject {
                         lookupDiagnostics.append("\(scheme): HTTP \(http.statusCode)")
                         continue
                     }
-                    guard let installed = try? JSONDecoder().decode([RemoteSlotModule].self, from: data) else {
-                        let preview = String(data: data.prefix(180), encoding: .utf8) ?? "<non-text response>"
-                        lookupDiagnostics.append("\(scheme): response was not a module array (\(preview))")
+                    // Parse the installed list loosely instead of decoding the whole
+                    // response into RemoteSlotModule. A single older/custom entry
+                    // with a missing field can make strict Codable decoding reject
+                    // the entire array, hiding the DSP path for otherwise valid FX.
+                    guard let json = try? JSONSerialization.jsonObject(with: data),
+                          let installed = Self.moduleEntryDictionaries(from: json),
+                          !installed.isEmpty else {
+                        let preview = String(data: data.prefix(240), encoding: .utf8) ?? "<non-text response>"
+                        lookupDiagnostics.append("\(scheme): could not find module entries in response (\(preview))")
                         continue
                     }
-                    let match = installed.first(where: { $0.id == module.id && $0.componentType == "audio_fx" })
-                        ?? installed.first(where: {
-                            $0.name.caseInsensitiveCompare(module.name) == .orderedSame
-                                && $0.componentType == "audio_fx"
-                        })
-                    if let path = match?.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty {
+                    func field(_ entry: [String: Any], _ names: [String]) -> String? {
+                        for name in names {
+                            if let value = entry[name] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            if let pair = entry.first(where: { $0.key.caseInsensitiveCompare(name) == .orderedSame }),
+                               let value = pair.value as? String,
+                               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                return value.trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                        }
+                        return nil
+                    }
+                    let matches = installed.filter { entry in
+                        let id = field(entry, ["id", "module_id", "moduleId"])
+                        let name = field(entry, ["name", "display_name", "displayName"])
+                        let type = field(entry, ["component_type", "componentType", "type"])
+                        let identityMatches = id?.caseInsensitiveCompare(module.id) == .orderedSame
+                            || name?.caseInsensitiveCompare(module.name) == .orderedSame
+                        return identityMatches && (type == nil || type?.caseInsensitiveCompare("audio_fx") == .orderedSame)
+                    }
+                    if let match = matches.first,
+                       let path = field(match, ["dsp_path", "dspPath", "dsp_path_abs", "dspPathAbs", "dsp", "path"]) {
                         guard self.isConnected, case .masterFX = self.wireTarget else { return }
+                        RemoteDiagnostics.log("Master FX DSP path resolved using flexible installed-list parsing: module=\(module.id), path=\(path)")
                         self.sendMasterFXLoad(module: module, component: component, dspPath: path)
                         return
                     }
-                    let matchingDetails = installed
-                        .filter { $0.id.caseInsensitiveCompare(module.id) == .orderedSame
-                            || $0.name.caseInsensitiveCompare(module.name) == .orderedSame }
-                        .map { "id=\($0.id), name=\($0.name), type=\($0.componentType), dsp_path=\($0.dsp_path ?? "nil")" }
-                    lookupDiagnostics.append("\(scheme): decoded \(installed.count) modules; matching entries: \(matchingDetails.isEmpty ? "none" : matchingDetails.joined(separator: "; "))")
+                    let matchingDetails = matches.map { entry in
+                        let id = field(entry, ["id", "module_id", "moduleId"]) ?? "?"
+                        let name = field(entry, ["name", "display_name", "displayName"]) ?? "?"
+                        let type = field(entry, ["component_type", "componentType", "type"]) ?? "?"
+                        let path = field(entry, ["dsp_path", "dspPath", "dsp_path_abs", "dspPathAbs", "dsp", "path"]) ?? "nil"
+                        return "id=\(id), name=\(name), type=\(type), dsp_path=\(path)"
+                    }
+                    lookupDiagnostics.append("\(scheme): parsed \(installed.count) entries; matching entries: \(matchingDetails.isEmpty ? "none" : matchingDetails.joined(separator: "; "))")
                     RemoteDiagnostics.log("Master FX installed-list lookup diagnostics: \(lookupDiagnostics.last ?? "no detail")")
                 } catch {
                     lookupDiagnostics.append("\(scheme): \(error.localizedDescription)")
