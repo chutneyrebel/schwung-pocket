@@ -94,14 +94,56 @@ struct SchwungTrollerScreen: View {
                     Button {
                         remote.select(destination)
                     } label: {
-                        Label(destination.title, systemImage: destination.symbol)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .foregroundStyle(remote.destination == destination ? Theme.background : Color.white)
-                            .background(remote.destination == destination ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
+                        VStack(spacing: 4) {
+                            Label(destination.title, systemImage: destination.symbol)
+                                .font(.system(size: 12, weight: .semibold))
+                            if let slot = slotNumber(for: destination) {
+                                Text(remote.slotInstrumentNames[slot] ?? "Slot \(slot + 1)")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(remote.destination == destination ? Theme.background.opacity(0.8) : Theme.muted)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .foregroundStyle(remote.destination == destination ? Theme.background : Color.white)
+                        .background(remote.destination == destination ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            if remote.isConnected {
+                HStack(spacing: 8) {
+                    ForEach(0..<4, id: \.self) { slot in
+                        VStack(spacing: 6) {
+                            Text("SLOT \(slot + 1)")
+                                .font(.system(size: 9, weight: .heavy))
+                                .tracking(0.8)
+                                .foregroundStyle(Theme.muted)
+                            HStack(spacing: 5) {
+                                Button {
+                                    remote.setSlotMuted(!remote.isSlotMuted(slot), slot: slot)
+                                } label: {
+                                    Text(remote.isSlotMuted(slot) ? "MUTED" : "M")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .frame(maxWidth: .infinity, minHeight: 27)
+                                        .foregroundStyle(remote.isSlotMuted(slot) ? Theme.background : Color.white)
+                                        .background(remote.isSlotMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 7))
+                                }.buttonStyle(.plain)
+                                Button {
+                                    remote.setSlotSoloed(!remote.isSlotSoloed(slot), slot: slot)
+                                } label: {
+                                    Text(remote.isSlotSoloed(slot) ? "SOLO" : "S")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .frame(maxWidth: .infinity, minHeight: 27)
+                                        .foregroundStyle(remote.isSlotSoloed(slot) ? Theme.background : Color.white)
+                                        .background(remote.isSlotSoloed(slot) ? Theme.violet : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 7))
+                                }.buttonStyle(.plain)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.top, 8)
             }
         }
         .padding(16).background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
@@ -289,6 +331,16 @@ struct SchwungTrollerScreen: View {
             }.pickerStyle(.menu).tint(Theme.accent)
         }
         .padding(16).background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func slotNumber(for destination: RemoteDestination) -> Int? {
+        switch destination {
+        case .slot1: return 0
+        case .slot2: return 1
+        case .slot3: return 2
+        case .slot4: return 3
+        case .masterFX, .tool: return nil
+        }
     }
 
     private var isSlotDestination: Bool {
