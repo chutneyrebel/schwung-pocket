@@ -35,8 +35,6 @@ struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
     @StateObject private var remote = RemoteControlStore()
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage(RemoteDiagnostics.defaultsKey) private var diagnosticsEnabled = false
-    @State private var copiedReport = false
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
@@ -114,35 +112,32 @@ struct NativeControlsScreen: View {
 
     private var connectionCard: some View {
         PocketCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(statusColor).frame(width: 7, height: 7)
                     Text(remote.statusText)
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Spacer(minLength: 0)
                 }
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     switch remote.connection {
                     case .connected, .connecting, .reconnecting:
                         Button { remote.disconnect() } label: {
-                            Label("Disconnect", systemImage: "xmark.circle.fill").font(.system(size: 13, weight: .bold))
+                            Label("Disconnect", systemImage: "xmark.circle.fill").font(.system(size: 11, weight: .bold))
                         }.buttonStyle(StudioSecondaryButton())
                     case .disconnected, .failed:
                         Button { remote.connect(address: device.addressText) } label: {
-                            Label("Connect", systemImage: "dot.radiowaves.left.and.right").font(.system(size: 13, weight: .bold))
+                            Label("Connect", systemImage: "dot.radiowaves.left.and.right").font(.system(size: 11, weight: .bold))
                         }.buttonStyle(StudioPrimaryButton())
                     }
                     if remote.isConnected {
                         Button { remote.refresh() } label: {
-                            Label("Reload", systemImage: "arrow.clockwise").font(.system(size: 12, weight: .semibold))
+                            Label("Reload", systemImage: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
                         }.buttonStyle(StudioSecondaryButton())
                     }
                 }
-                Toggle(isOn: $diagnosticsEnabled) {
-                    Text("Developer diagnostics").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
-                }
-                .tint(Theme.accent)
             }
         }
     }
@@ -857,16 +852,7 @@ struct NativeControlsScreen: View {
                         ForEach(knobs) { parameter in knob(for: parameter) }
                     }
                 }
-                ForEach(others) { parameter in ParameterRow(parameter: parameter, remote: remote, diagnostics: diagnosticsEnabled) }
-                if diagnosticsEnabled {
-                    Button {
-                        UIPasteboard.general.string = remote.metadataReport
-                        copiedReport = true
-                    } label: {
-                        Label(copiedReport ? "Copied metadata" : "Copy parameter metadata", systemImage: "doc.on.doc")
-                            .font(.system(size: 12, weight: .semibold))
-                    }.buttonStyle(StudioSecondaryButton())
-                }
+                ForEach(others) { parameter in ParameterRow(parameter: parameter, remote: remote) }
             }
         }
     }
@@ -1078,7 +1064,6 @@ private struct ModuleSwapSheet: View {
 private struct ParameterRow: View {
     let parameter: RemoteParameter
     @ObservedObject var remote: RemoteControlStore
-    let diagnostics: Bool
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
