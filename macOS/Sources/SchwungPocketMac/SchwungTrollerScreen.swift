@@ -150,7 +150,8 @@ struct SchwungTrollerScreen: View {
             Text("SECTION ORDER").font(.system(size: 10, weight: .bold)).tracking(1.4).foregroundStyle(Theme.muted)
             Text("Use the arrows to choose the order of the SchwungTroller panels. Your choice is saved on this Mac.")
                 .font(.caption).foregroundStyle(Theme.muted)
-            ForEach(Array(orderedSectionKeys.enumerated()), id: \.element) { index, key in
+            ForEach(orderedSectionKeys, id: \.self) { key in
+                let index = orderedSectionKeys.firstIndex(of: key) ?? 0
                 HStack(spacing: 10) {
                     Text(sectionTitle(for: key)).font(.callout.weight(.medium))
                     Spacer()
