@@ -39,6 +39,7 @@ struct NativeControlsScreen: View {
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
     @State private var pendingMasterFXClearComponent: String?
+    @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
 
     var body: some View {
@@ -49,7 +50,6 @@ struct NativeControlsScreen: View {
         ) {
             connectionCard
             destinationCard
-            midiActivityCard
             if isInstrumentSlot {
                 slotChainCard
             } else if isMasterFX {
@@ -137,7 +137,26 @@ struct NativeControlsScreen: View {
                             Label("Reload", systemImage: "arrow.clockwise").font(.system(size: 11, weight: .semibold))
                         }.buttonStyle(StudioSecondaryButton())
                     }
+                    Spacer(minLength: 0)
                 }
+                DisclosureGroup(isExpanded: $showingMIDILog) {
+                    midiActivityContent
+                        .padding(.top, 5)
+                } label: {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(midiActivity.events.isEmpty ? Theme.muted : Color(red: 1.0, green: 0.82, blue: 0.36))
+                            .frame(width: 7, height: 7)
+                        Text("Live Move Note / CC Log")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                        Spacer()
+                        if !midiActivity.events.isEmpty {
+                            Text("LIVE").font(.system(size: 9, weight: .heavy)).foregroundStyle(Theme.success)
+                        }
+                    }
+                }
+                .tint(Theme.accent)
             }
         }
     }
@@ -166,8 +185,10 @@ struct NativeControlsScreen: View {
                     selection: remote.destination,
                     isConnected: remote.isConnected,
                     slotInstrumentNames: remote.slotInstrumentNames,
+                    slotVolume: remote.slotVolume(for:),
                     isMuted: remote.isSlotMuted,
                     isSoloed: remote.isSlotSoloed,
+                    onVolumeChange: { slot, volume in remote.setSlotVolume(volume, slot: slot) },
                     onMuteToggle: { slot, muted in remote.setSlotMuted(muted, slot: slot) },
                     onSoloToggle: { slot, soloed in remote.setSlotSoloed(soloed, slot: slot) }
                 ) { destination in
@@ -180,36 +201,19 @@ struct NativeControlsScreen: View {
         }
     }
 
-    private var midiActivityCard: some View {
-        PocketCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 7) {
-                    Circle()
-                        .fill(midiActivity.events.isEmpty ? Theme.muted : Color(red: 1.0, green: 0.82, blue: 0.36))
-                        .frame(width: 7, height: 7)
-                    Text("LIVE MOVE NOTE / CC LOG")
-                        .font(.system(size: 10, weight: .heavy))
-                        .tracking(1.3)
-                        .foregroundStyle(Theme.muted)
-                    Spacer()
-                    if !midiActivity.events.isEmpty {
-                        Text("LIVE")
-                            .font(.system(size: 9, weight: .heavy))
-                            .foregroundStyle(Theme.success)
-                    }
-                }
-                if midiActivity.events.isEmpty {
-                    Text("Use a pad or control on Move to see recent note and CC events from the Mirror log.")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
-                        Text(event)
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(Color.white)
-                            .lineLimit(1)
-                    }
+    private var midiActivityContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if midiActivity.events.isEmpty {
+                Text("Use a pad or control on Move to see recent note and CC events from the Mirror log.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
+                    Text(event)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
                 }
             }
         }
@@ -259,43 +263,71 @@ struct NativeControlsScreen: View {
                     ForEach(chainComponents) { component in
                         let selected = selectedChainComponent == component
                         let moduleName = remote.componentNames[component.rawValue]
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.16)) {
-                                selectedChainComponent = component
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack(spacing: 6) {
-                                    Circle()
-                                        .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
-                                        .frame(width: 6, height: 6)
-                                    Image(systemName: component.symbol)
-                                        .font(.system(size: 13, weight: .semibold))
-                                    Text(component.title)
-                                        .font(.system(size: 12, weight: .bold))
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.8)
+                        VStack(alignment: .leading, spacing: 7) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.16)) {
+                                    selectedChainComponent = component
                                 }
-                                Text(moduleName ?? "Not loaded")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .lineLimit(1)
-                                    .foregroundStyle(Theme.muted)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
+                                            .frame(width: 6, height: 6)
+                                        Image(systemName: component.symbol)
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Text(component.title)
+                                            .font(.system(size: 12, weight: .bold))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.8)
+                                    }
+                                    Text(moduleName ?? "Not loaded")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .lineLimit(1)
+                                        .foregroundStyle(Theme.muted)
+                                }
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity, minHeight: 39, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .background {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Theme.surfaceRaised)
+                            .buttonStyle(.plain)
+                            HStack(spacing: 5) {
+                                Button {
+                                    remote.setComponentBypassed(
+                                        component.rawValue,
+                                        bypassed: !remote.isComponentBypassed(component.rawValue)
+                                    )
+                                } label: {
+                                    Text(remote.isComponentBypassed(component.rawValue) ? "Enable" : "Bypass")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                        .frame(maxWidth: .infinity, minHeight: 25)
+                                }
+                                .buttonStyle(StudioSecondaryButton())
+                                .disabled(!remote.isConnected || moduleName == nil)
+                                Button {
+                                    selectedChainComponent = component
+                                    showingClearConfirmation = true
+                                } label: {
+                                    Image(systemName: "xmark.circle")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .frame(width: 28, height: 25)
+                                }
+                                .buttonStyle(StudioSecondaryButton())
+                                .accessibilityLabel("Clear \(component.title)")
+                                .disabled(!remote.isConnected || moduleName == nil)
                             }
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
-                            }
-                            .animation(.easeInOut(duration: 0.16), value: selected)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(component.title), \(moduleName ?? "not loaded")")
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, minHeight: 78, alignment: .leading)
+                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1)
+                        }
+                        .accessibilityElement(children: .contain)
                     }
                 }
                 HStack(spacing: 10) {
@@ -879,13 +911,13 @@ struct DestinationSelector: View {
     let selection: RemoteDestination
     let isConnected: Bool
     let slotInstrumentNames: [Int: String]
+    let slotVolume: (Int) -> Double
     let isMuted: (Int) -> Bool
     let isSoloed: (Int) -> Bool
+    let onVolumeChange: (Int, Double) -> Void
     let onMuteToggle: (Int, Bool) -> Void
     let onSoloToggle: (Int, Bool) -> Void
     let onSelect: (RemoteDestination) -> Void
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     private func wireSlot(for destination: RemoteDestination) -> Int? {
         switch destination {
@@ -897,62 +929,102 @@ struct DestinationSelector: View {
         }
     }
 
+    private var slotDestinations: [RemoteDestination] {
+        [.slot1, .slot2, .slot3, .slot4]
+    }
+
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
-            ForEach(RemoteDestination.allCases) { destination in
-                let isSelected = destination == selection
-                let slot = wireSlot(for: destination)
-                VStack(spacing: 6) {
-                    Button { onSelect(destination) } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: destination.symbol).font(.system(size: 15, weight: .semibold))
-                            Text(slot.flatMap { slotInstrumentNames[$0] } ?? (slot.map { "Slot \($0 + 1)" } ?? destination.title))
-                                .font(.system(size: 12, weight: .bold))
-                                .lineLimit(1).minimumScaleFactor(0.75)
-                        }
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 42)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(slot.flatMap { slotInstrumentNames[$0] } ?? (slot.map { "Slot \($0 + 1)" } ?? destination.title))
-                    .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-
-                    if let slot {
-                        HStack(spacing: 6) {
-                            Button {
-                                onMuteToggle(slot, !isMuted(slot))
-                            } label: {
-                                Text("M")
+        VStack(spacing: 9) {
+            HStack(alignment: .top, spacing: 5) {
+                ForEach(slotDestinations) { destination in
+                    let slot = wireSlot(for: destination)!
+                    let isSelected = destination == selection
+                    VStack(spacing: 5) {
+                        Button { onSelect(destination) } label: {
+                            VStack(spacing: 3) {
+                                Text("S\(slot + 1)")
                                     .font(.system(size: 11, weight: .heavy))
-                                    .frame(maxWidth: .infinity, minHeight: 23)
+                                Text(slotInstrumentNames[slot] ?? "Slot \(slot + 1)")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
+                            }
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity, minHeight: 34)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(slotInstrumentNames[slot] ?? "Slot \(slot + 1)")
+                        HStack(spacing: 3) {
+                            Button { onMuteToggle(slot, !isMuted(slot)) } label: {
+                                Text("M").font(.system(size: 9, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 21)
                                     .foregroundStyle(isMuted(slot) ? Color.white : Theme.muted)
-                                    .background(isMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
+                                    .background(isMuted(slot) ? Theme.warning : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 5))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Slot \(slot + 1) mute")
-                            .disabled(false)
-
-                            Button {
-                                onSoloToggle(slot, !isSoloed(slot))
-                            } label: {
-                                Text("S")
-                                    .font(.system(size: 11, weight: .heavy))
-                                    .frame(maxWidth: .infinity, minHeight: 23)
+                            Button { onSoloToggle(slot, !isSoloed(slot)) } label: {
+                                Text("S").font(.system(size: 9, weight: .heavy))
+                                    .frame(maxWidth: .infinity, minHeight: 21)
                                     .foregroundStyle(isSoloed(slot) ? Theme.background : Theme.muted)
-                                    .background(isSoloed(slot) ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6))
+                                    .background(isSoloed(slot) ? Theme.accent : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 5))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Slot \(slot + 1) solo")
                         }
+                        VStack(spacing: 2) {
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    Slider(
+                                        value: Binding(
+                                            get: { slotVolume(slot) },
+                                            set: { onVolumeChange(slot, $0) }
+                                        ),
+                                        in: 0...4,
+                                        step: 0.05
+                                    )
+                                    .tint(Theme.accent)
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.85))
+                                        .frame(width: 1.5, height: 20)
+                                        .offset(x: max(0, geometry.size.width * 0.25 - 0.75), y: 0)
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .frame(height: 23)
+                            .disabled(!isConnected)
+                            Text("\(Int((slotVolume(slot) * 100).rounded()))%")
+                                .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+                                .foregroundStyle(slotVolume(slot) >= 1 ? Theme.accent : Theme.muted)
+                            Text("100% ref.")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .background(isSelected ? Theme.accent.opacity(0.13) : Theme.surfaceRaised.opacity(0.45), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
                     }
                 }
-                .padding(7)
-                .frame(maxWidth: .infinity, minHeight: slot == nil ? 66 : 78)
-                .background(isSelected ? Theme.accent.opacity(0.13) : Theme.surfaceRaised.opacity(0.45), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+            }
+            HStack(spacing: 7) {
+                ForEach([RemoteDestination.masterFX, .tool]) { destination in
+                    let isSelected = destination == selection
+                    Button { onSelect(destination) } label: {
+                        Label(destination.title, systemImage: destination.symbol)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.white)
+                            .frame(maxWidth: .infinity, minHeight: 34)
+                            .background(isSelected ? Theme.accent.opacity(0.22) : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.06), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
