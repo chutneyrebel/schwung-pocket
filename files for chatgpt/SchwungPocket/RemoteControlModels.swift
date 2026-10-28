@@ -112,7 +112,13 @@ struct RemoteParameter: Identifiable, Hashable {
             return options.isEmpty ? .readOnly(reason: "Choice parameter without options") : .choice
         case "init":
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
-        case "filepath", "canvas":
+        case "canvas":
+            // Explicit options provide a safe discrete control; custom canvas metadata without
+            // options remains read-only because its interaction semantics cannot be inferred.
+            return options.isEmpty
+                ? .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
+                : .choice
+        case "filepath":
             return .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
         case "tool_read_only":
             return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")

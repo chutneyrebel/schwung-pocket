@@ -46,6 +46,7 @@ private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
 
 struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
+    @StateObject private var remote = RemoteControlStore()
     @State private var selectedTab: PocketTab = .home
     @State private var selectedStudioModule: PocketStudioModule?
     @State private var navigationHidden = false
@@ -78,7 +79,7 @@ struct ContentView: View {
         case .home:
             HomeScreen(device: device, openModules: { selectedTab = .modules }, openStudioModule: { module in selectedStudioModule = module; selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
         case .nativeControls:
-            NativeControlsScreen(device: device)
+            NativeControlsScreen(device: device, remote: remote)
         case .modules:
             if let module = selectedStudioModule {
                 VStack(spacing: 0) {

@@ -56,7 +56,7 @@ private enum TrollerSection: String, CaseIterable, Identifiable {
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
-    @StateObject private var remote = RemoteControlStore()
+    @ObservedObject var remote: RemoteControlStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var showingModulePicker = false
@@ -64,7 +64,7 @@ struct NativeControlsScreen: View {
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
-    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "connection,mixer,signalChain,parameters,slotSettings"
+    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "mixer,connection,signalChain,parameters,slotSettings"
     @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = ""
 
     var body: some View {
@@ -110,7 +110,7 @@ struct NativeControlsScreen: View {
             // The WebSocket subscribes to all four mixer slots when it connects.
             // Keep those live subscriptions and cached M/S states when returning
             // from Mirror instead of sending four duplicate subscribe requests.
-            if remote.connection == .disconnected { remote.connect(address: device.addressText) }
+            remote.connectIfNeeded(address: device.addressText)
         }
         // Keep the remote subscription alive when switching between SchwungTroller and Mirror.
         // The scene-phase handler still manages background/foreground recovery.
