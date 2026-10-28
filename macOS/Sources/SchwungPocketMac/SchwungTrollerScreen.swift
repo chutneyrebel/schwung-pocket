@@ -358,7 +358,7 @@ struct SchwungTrollerScreen: View {
                     .disabled(!remote.isConnected || remote.componentNames[selectedComponent] == nil)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 8)], spacing: 8) {
-                ForEach((1...max(remote.midiFXCapacity, 1)).map { "midi_fx\\($0)" } + ["synth"] + (1...max(remote.audioFXCapacity, 1)).map { "fx\\($0)" }, id: \\.self) { component in
+                ForEach((1...max(remote.midiFXCapacity, 1)).map { "midi_fx\($0)" } + ["synth"] + (1...max(remote.audioFXCapacity, 1)).map { "fx\($0)" }, id: \.self) { component in
                     let title = component == "synth" ? "Instrument" : component.replacingOccurrences(of: "_", with: " ").uppercased()
                     let selected = selectedComponent == component
                     Button { selectedComponent = component } label: {
