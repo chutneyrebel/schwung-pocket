@@ -15,7 +15,6 @@ struct SchwungTrollerScreen: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                header
                 destinationPicker
                 if isSlotDestination { slotChainPicker }
                 if remote.destination == .tool {
@@ -140,6 +139,28 @@ struct SchwungTrollerScreen: View {
                                         .background(remote.isSlotSoloed(slot) ? Theme.violet : Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 7))
                                 }.buttonStyle(.plain)
                             }
+                            Text("\(Int(remote.slotVolume(for: slot) * 100))%")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Theme.muted)
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    Rectangle().fill(Theme.muted.opacity(0.55)).frame(width: 1, height: 12)
+                                        .offset(x: geometry.size.width * 0.25)
+                                    Slider(value: Binding(
+                                        get: { remote.slotVolume(for: slot) },
+                                        set: { remote.setSlotVolume($0, slot: slot) }
+                                    ), in: 0...4)
+                                    .tint(Theme.accent)
+                                }
+                            }
+                            .frame(height: 20)
+                            HStack {
+                                Text("0")
+                                Spacer()
+                                Text("100%")
+                                Spacer()
+                                Text("400%")
+                            }.font(.system(size: 8, weight: .medium)).foregroundStyle(Theme.muted)
                         }
                         .frame(maxWidth: .infinity)
                     }
