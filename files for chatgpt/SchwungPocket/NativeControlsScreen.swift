@@ -873,23 +873,30 @@ struct NativeControlsScreen: View {
 
     private var slotSettingsCard: some View {
         PocketCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("SLOT SETTINGS")
-                        .font(.system(size: 10, weight: .heavy)).tracking(1.4)
-                        .foregroundStyle(Theme.muted)
-                    Spacer()
-                    Text(remote.destination.title)
+            VStack(alignment: .leading, spacing: 15) {
+                HStack(alignment: .center, spacing: 8) {
+                    Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Theme.accent)
+                    Text("SLOT SETTINGS")
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.4)
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    Text(remote.destination.title)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.accent)
+                        .lineLimit(1)
                 }
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Volume").font(.system(size: 13, weight: .medium))
+                        Label("Output level", systemImage: "speaker.wave.2")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.white)
                         Spacer()
                         Text("\(Int((remote.slotVolume * 100).rounded()))%")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .foregroundStyle(Theme.accent)
                     }
                     Slider(
@@ -902,64 +909,109 @@ struct NativeControlsScreen: View {
                     )
                     .tint(Theme.accent)
                     .disabled(!remote.isConnected || !isInstrumentSlot)
-                }
 
-                Toggle(isOn: Binding(
-                    get: { remote.slotMuted },
-                    set: { remote.setSlotMuted($0) }
-                )) {
-                    Text("Muted").font(.system(size: 13, weight: .medium))
-                }
-                .tint(Theme.accent)
-                .disabled(!remote.isConnected || !isInstrumentSlot)
-
-                Toggle(isOn: Binding(
-                    get: { remote.slotSoloed },
-                    set: { remote.setSlotSoloed($0) }
-                )) {
-                    Text("Soloed").font(.system(size: 13, weight: .medium))
-                }
-                .tint(Theme.accent)
-                .disabled(!remote.isConnected || !isInstrumentSlot)
-
-                settingDivider
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Receive Channel").font(.system(size: 13, weight: .medium))
-                    Picker("Receive Channel", selection: Binding(
-                        get: { remote.slotReceiveChannel },
-                        set: { remote.setSlotReceiveChannel($0) }
-                    )) {
-                        Text("All").tag("0")
-                        ForEach(1...16, id: \.self) { channel in
-                            Text("Channel \(channel)").tag(String(channel))
-                        }
+                    HStack {
+                        Text("0%")
+                        Spacer()
+                        Text("100% reference")
+                        Spacer()
+                        Text("400%")
                     }
-                    .pickerStyle(.menu)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                }
+                .padding(11)
+                .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("PLAYBACK")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.muted)
+
+                    Toggle(isOn: Binding(
+                        get: { remote.slotMuted },
+                        set: { remote.setSlotMuted($0) }
+                    )) {
+                        Label("Mute slot", systemImage: "speaker.slash")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .tint(Theme.accent)
+                    .disabled(!remote.isConnected || !isInstrumentSlot)
+
+                    settingDivider
+
+                    Toggle(isOn: Binding(
+                        get: { remote.slotSoloed },
+                        set: { remote.setSlotSoloed($0) }
+                    )) {
+                        Label("Solo slot", systemImage: "headphones")
+                            .font(.system(size: 12, weight: .medium))
+                    }
                     .tint(Theme.accent)
                     .disabled(!remote.isConnected || !isInstrumentSlot)
                 }
+                .padding(11)
+                .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Forward Channel").font(.system(size: 13, weight: .medium))
-                    Picker("Forward Channel", selection: Binding(
-                        get: { remote.slotForwardChannel },
-                        set: { remote.setSlotForwardChannel($0) }
-                    )) {
-                        Text("THRU").tag("-2")
-                        Text("Auto").tag("-1")
-                        ForEach(0...15, id: \.self) { channel in
-                            Text("Channel \(channel + 1)").tag(String(channel))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("MIDI ROUTING")
+                        .font(.system(size: 9, weight: .heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.muted)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Receive channel")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                        Picker("Receive Channel", selection: Binding(
+                            get: { remote.slotReceiveChannel },
+                            set: { remote.setSlotReceiveChannel($0) }
+                        )) {
+                            Text("All").tag("0")
+                            ForEach(1...16, id: \.self) { channel in
+                                Text("Channel \(channel)").tag(String(channel))
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .tint(Theme.accent)
+                        .disabled(!remote.isConnected || !isInstrumentSlot)
                     }
-                    .pickerStyle(.menu)
-                    .tint(Theme.accent)
-                    .disabled(!remote.isConnected || !isInstrumentSlot)
-                }
 
-                if !isInstrumentSlot {
-                    Text("These settings apply to Slots 1–4. Master FX and Tool use separate controls.")
-                        .font(.system(size: 11)).lineSpacing(2).foregroundStyle(Theme.muted)
+                    settingDivider
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Forward channel")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                        Picker("Forward Channel", selection: Binding(
+                            get: { remote.slotForwardChannel },
+                            set: { remote.setSlotForwardChannel($0) }
+                        )) {
+                            Text("THRU").tag("-2")
+                            Text("Auto").tag("-1")
+                            ForEach(0...15, id: \.self) { channel in
+                                Text("Channel \(channel + 1)").tag(String(channel))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.accent)
+                        .disabled(!remote.isConnected || !isInstrumentSlot)
+                    }
+                }
+                .padding(11)
+                .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                if !remote.isConnected {
+                    Label("Connect to Move to edit these settings.", systemImage: "info.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if !isInstrumentSlot {
+                    Label("These settings apply to Slots 1–4. Master FX and Tool use separate controls.", systemImage: "info.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
