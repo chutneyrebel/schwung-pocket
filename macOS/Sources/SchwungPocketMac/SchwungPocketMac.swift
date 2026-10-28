@@ -300,7 +300,10 @@ struct DeviceWebView: NSViewRepresentable {
     let url: URL
     let reloadID: UUID
     func makeNSView(context: Context) -> WKWebView {
-        let view = WKWebView()
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.add(context.coordinator, name: "schwungMIDIEvent")
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.navigationDelegate = context.coordinator
         view.load(URLRequest(url: url, timeoutInterval: 15))
         return view
     }
@@ -311,8 +314,77 @@ struct DeviceWebView: NSViewRepresentable {
         }
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
-    final class Coordinator {
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var lastReloadID = UUID()
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "schwungMIDIEvent",
+                  let event = message.body as? [String: Any] else { return }
+            Task { @MainActor in MirrorMIDIActivityStore.shared.record(event) }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard webView.url?.path == "/mirror" else { return }
+            let script = #"""
+            (() => {
+              if (window.__spMIDIEventBridgeInstalled) return;
+              const log = document.getElementById('log');
+              const hero = document.getElementById('hero');
+              if (!log || !hero) return;
+              let lastEvent = '';
+              let lastCount = null;
+              let rawSurfaceAvailable = false;
+              const post = event => window.webkit.messageHandlers.schwungMIDIEvent.postMessage(event);
+              const pollSurfaceEvents = () => {
+                try {
+                  if (typeof surfView === 'undefined' || typeof OFF === 'undefined' ||
+                      typeof surf === 'undefined' || typeof N_EVENTS === 'undefined') return;
+                  rawSurfaceAvailable = true;
+                  const count = surfView.getUint32(OFF.evCount, true);
+                  if (lastCount === null) { lastCount = count; return; }
+                  if (count === lastCount) return;
+                  if (count < lastCount) { lastCount = count; return; }
+                  const first = Math.max(lastCount, count - N_EVENTS);
+                  for (let eventIndex = first; eventIndex < count; eventIndex++) {
+                    const offset = OFF.events + (eventIndex % N_EVENTS) * 8;
+                    const status = surf[offset + 4], data1 = surf[offset + 5], data2 = surf[offset + 6];
+                    const type = status & 0xF0;
+                    if (type === 0x90 || type === 0x80) {
+                      const noteOn = type === 0x90 && data2 > 0;
+                      const label = typeof noteName === 'function' ? noteName(data1) : ('Note ' + data1);
+                      post({ kind: 'note', label, action: noteOn ? ('velocity ' + data2) : 'note off', note: data1, velocity: data2, pressed: noteOn });
+                    } else if (type === 0xB0) {
+                      const label = (typeof CC_NAMES !== 'undefined' && CC_NAMES[data1]) ? CC_NAMES[data1] : ('CC ' + data1);
+                      post({ kind: 'cc', label, action: 'value ' + data2, controller: data1, value: data2 });
+                    }
+                  }
+                  lastCount = count;
+                } catch (_) {}
+              };
+              const publishLatestLogRow = () => {
+                if (rawSurfaceAvailable || log.classList.contains('hidden')) return;
+                const row = log.querySelector('.row');
+                if (!row) return;
+                const cells = [...row.querySelectorAll('span')];
+                if (cells.length < 2) return;
+                const label = (cells[0].textContent || '').trim();
+                const action = (cells[1].textContent || '').trim();
+                const age = (cells[2]?.textContent || '').trim();
+                if (!label || !action) return;
+                const key = label + '|' + action;
+                if (key === lastEvent) return;
+                lastEvent = key;
+                post({ kind: 'log', label, action, age });
+              };
+              new MutationObserver(publishLatestLogRow).observe(log, { childList: true, subtree: true, characterData: true });
+              window.__spMIDIEventBridgeInstalled = true;
+              pollSurfaceEvents();
+              window.__spMIDIEventPoll = setInterval(pollSurfaceEvents, 80);
+            })();
+            """#
+            webView.evaluateJavaScript(script, completionHandler: nil)
+        }
     }
 }
 
