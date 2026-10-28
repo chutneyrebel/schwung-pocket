@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - v0.8.3-development
+      - v0.9-development
   pull_request:
     branches: [main]
 
