@@ -218,7 +218,6 @@ struct ManagerWebView: UIViewRepresentable {
               // Use a companion-owned fullscreen class instead of Schwung's native
               // body.fs mode. The native rule hides every sibling except #hero and
               // conflicts with the app's injected layout rules on some WebKit builds.
-              const hero = document.getElementById('hero');
               if (hero && !window.__spMirrorFullscreenTapInstalled) {
                 window.__spMirrorFullscreenTapInstalled = true;
                 hero.addEventListener('click', event => {
