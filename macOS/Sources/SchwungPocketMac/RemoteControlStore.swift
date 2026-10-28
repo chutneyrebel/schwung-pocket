@@ -203,6 +203,7 @@ final class RemoteControlStore: ObservableObject {
         tearDownSocket()
         connection = .disconnected
         if loadState == .loading || loadState == .loaded { loadState = .idle }
+        clearMixerState()
         clearPresentedData()
     }
 
@@ -310,6 +311,7 @@ final class RemoteControlStore: ObservableObject {
     private func handleConnectionLoss(_ error: Error) {
         RemoteDiagnostics.log("connection lost: \(error.localizedDescription)")
         tearDownSocket()
+        clearMixerState()
         guard wantsConnection else { return }
         retryAttempt += 1
         if retryAttempt > maxRetries {
@@ -448,6 +450,15 @@ final class RemoteControlStore: ObservableObject {
             guard let self, !Task.isCancelled, generation == self.selectionGeneration, self.loadState == .loading else { return }
             self.loadState = .error("No response from the Move for \(self.destination.title).")
         }
+    }
+
+    /// Clears cached mixer values when the socket is no longer authoritative.
+    /// Keep this separate from clearPresentedData(), which also runs on destination
+    /// changes and must not wipe the other slots' live mixer state.
+    private func clearMixerState() {
+        slotMixStates = [:]
+        slotVolumes = [:]
+        slotInstrumentNames = [:]
     }
 
     /// Drops everything shown for the previous selection so stale values never look current.
