@@ -908,6 +908,8 @@ struct NativeControlsScreen: View {
                         step: 0.05
                     )
                     .tint(Theme.accent)
+                    .accessibilityLabel("Slot output level")
+                    .accessibilityValue("\(Int((remote.slotVolume * 100).rounded())) percent")
                     .disabled(!remote.isConnected || !isInstrumentSlot)
 
                     HStack {
