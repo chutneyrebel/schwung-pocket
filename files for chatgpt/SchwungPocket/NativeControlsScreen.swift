@@ -222,11 +222,25 @@ struct NativeControlsScreen: View {
 
     private func sectionSummary(_ section: TrollerSection) -> String {
         switch section {
-        case .connection: return "Link status and incoming MIDI"
-        case .mixer: return "Four independent slot levels"
-        case .signalChain: return isMasterFX ? "Master effect positions" : "Swap and manage modules"
-        case .parameters: return "Metadata-supported controls"
-        case .slotSettings: return "Current slot options"
+        case .connection:
+            return midiActivity.events.isEmpty ? "Link status and incoming MIDI" : "\(midiActivity.events.count) recent MIDI events"
+        case .mixer:
+            return "Four independent slot levels"
+        case .signalChain:
+            if isMasterFX {
+                let loaded = (1...max(remote.masterFXCapacity, 1)).filter {
+                    remote.componentNames["master_fx:fx\($0)"] != nil
+                }.count
+                return "\(loaded)/\(max(remote.masterFXCapacity, 1)) Master FX loaded"
+            }
+            let loaded = chainComponents.filter { remote.componentNames[$0.rawValue] != nil }.count
+            return "\(loaded)/\(chainComponents.count) modules loaded"
+        case .parameters:
+            return selectedComponentParameters.isEmpty
+                ? "Waiting for reported controls"
+                : "\(selectedComponentParameters.count) live controls · \(selectedChainComponent.title)"
+        case .slotSettings:
+            return "Current slot options"
         }
     }
 
@@ -1438,6 +1452,12 @@ private struct ParameterRow: View {
             case .knob:
                 EmptyView()
             }
+        }
+        .padding(11)
+        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
         }
     }
 
