@@ -32,6 +32,23 @@ jobs:
           APP="Schwung Pocket.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           cp "macOS/.build/release/SchwungPocketMac" "$APP/Contents/MacOS/SchwungPocketMac"
+          # Reuse the exact app icon from the iOS asset catalogue.
+          ICON_URL="https://raw.githubusercontent.com/chutneyrebel/schwung-pocket/v0.8.3-development/files%20for%20chatgpt/SchwungPocket/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+          curl --fail --location --retry 3 "$ICON_URL" -o /tmp/SchwungPocket-AppIcon.png
+          ICONSET="/tmp/SchwungPocket.iconset"
+          mkdir -p "$ICONSET"
+          sips -z 16 16 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_16x16.png" >/dev/null
+          sips -z 32 32 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_16x16@2x.png" >/dev/null
+          sips -z 32 32 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_32x32.png" >/dev/null
+          sips -z 64 64 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_32x32@2x.png" >/dev/null
+          sips -z 128 128 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_128x128.png" >/dev/null
+          sips -z 256 256 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_128x128@2x.png" >/dev/null
+          sips -z 256 256 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_256x256.png" >/dev/null
+          sips -z 512 512 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_256x256@2x.png" >/dev/null
+          sips -z 512 512 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_512x512.png" >/dev/null
+          sips -z 1024 1024 /tmp/SchwungPocket-AppIcon.png --out "$ICONSET/icon_512x512@2x.png" >/dev/null
+          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+
           cat > "$APP/Contents/Info.plist" <<'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -41,6 +58,7 @@ jobs:
             <key>CFBundleDisplayName</key><string>Schwung Pocket</string>
             <key>CFBundleIdentifier</key><string>com.chutneyrebel.schwungpocket.mac</string>
             <key>CFBundleExecutable</key><string>SchwungPocketMac</string>
+            <key>CFBundleIconFile</key><string>AppIcon</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>0.1.0</string>
             <key>CFBundleVersion</key><string>${GITHUB_RUN_NUMBER}</string>
