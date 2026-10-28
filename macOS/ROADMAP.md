@@ -26,10 +26,10 @@
 ## P1: Port iOS v0.9 SchwungTroller behaviour
 
 - [x] **Persistent section ordering.** Added Settings controls to move sections up/down, save automatically with `@AppStorage`, and render panels in saved order. Runtime persistence still needs a macOS check.
-- [ ] **Persistent collapse state.** Preserve the user's expanded/collapsed choices where practical, using macOS preferences rather than copying iOS storage assumptions blindly.
+- [x] **Persistent collapse state.** Expanded/collapsed choices now save to macOS preferences via `@AppStorage`; runtime persistence still needs checking.
 - [x] **Live MIDI activity bridge and UI.** Added a macOS `MirrorMIDIActivityStore`, WebKit message handler, Note/CC mirror-page bridge, green/yellow active indicator and collapsible recent-event log. Needs runtime and physical Move verification; the mirror page's event surfaces may vary.
 - [ ] **Connection display parity.** Port the current iOS connection status, reconnect/timeout feedback and lifecycle recovery where relevant. Keep one authoritative connection state and avoid opening duplicate sockets.
-- [ ] **Section organisation.** Signal Chain and Installed Modules are still separate panels; combine them under one logical section if that matches the current iOS v0.9 layout, keeping installation controls compact to the right of each position.
+- [x] **Section organisation.** Signal Chain and Installed Modules now share one collapsible logical panel, with install/swap controls retained alongside their positions.
 - [ ] **Avoid duplicate controls.** Keep parameter controls scoped to the selected component and retain the parameter-group selector inside Parameter Controls.
 
 ## P2: Port protocol and feature improvements from iOS v0.9
@@ -54,7 +54,7 @@
 - Current macOS target: `macOS/Sources/SchwungPocketMac/`.
 - Current iOS reference source: `files for chatgpt/SchwungPocket/` on `v0.9-development`.
 - iOS v0.9 already includes reorderable/collapsible SchwungTroller sections, persisted section order, vertical faders, and a real MIDI activity store. macOS must port these behaviours, not leave placeholder MIDI state.
-- The last confirmed macOS build pass before the MIDI/section-order work is GitHub Actions run [#34](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726883873), commit `f23a98b`. Build success confirms compile/package only, not runtime or Move hardware behaviour. Runs [#35](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726939672), [#36](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727164013) and [#37](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727210173) were queued at the last status check; confirm their eventual results before treating the combined source as build-verified.
+- The last confirmed macOS build pass before the MIDI/section-order work is GitHub Actions run [#34](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726883873), commit `f23a98b`. Build success confirms compile/package only, not runtime or Move hardware behaviour. Runs [#35](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40726939672), [#36](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727164013), [#37](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727210173) and [#38](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40727907403) were queued at the last status check. The newer collapse-persistence and combined-chain changes are in commit `7a6088a` and still require a build.
 
 ## Ongoing iOS-to-macOS sync workflow
 
@@ -70,7 +70,7 @@
 
 | Area | iOS reference | macOS status |
 |---|---|---|
-| SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Order implemented with `@AppStorage`; collapsed state not persisted yet; build/runtime verification pending |
+| SchwungTroller section order and collapsed state | `NativeControlsScreen.swift` on `v0.9-development` | Order and expanded/collapsed state implemented with `@AppStorage`; combined source build/runtime verification pending |
 | Live MIDI event bridge and activity log | `ManagerWebView.swift` + `NativeControlsScreen.swift` on `v0.9-development` | Bridge/store/UI implemented; build #34 passed for bridge commit; later UI build pending; runtime/Move verification pending |
 | Remote UI WebSocket and connection recovery | `RemoteControlStore.swift` on `v0.9-development` | Compare and port differences |
 | Slot mapping, volume, mute/solo, module chain | `RemoteControlStore.swift` + `RemoteControlModels.swift` on `v0.9-development` | Partial; needs parity audit |
