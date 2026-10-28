@@ -401,21 +401,50 @@ struct NativeControlsScreen: View {
     }
 
     private var midiActivityContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: midiActivity.events.isEmpty ? "waveform.path" : "waveform.path.ecg")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(midiActivity.events.isEmpty ? Theme.muted : Theme.success)
+                Text(midiActivity.events.isEmpty ? "Waiting for Move events" : "Recent event stream")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+                Spacer(minLength: 4)
+                Text("\(midiActivity.events.count)")
+                    .font(.system(size: 10, weight: .bold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(midiActivity.events.isEmpty ? Theme.muted : Theme.success)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background((midiActivity.events.isEmpty ? Theme.muted : Theme.success).opacity(0.10), in: Capsule())
+            }
+
             if midiActivity.events.isEmpty {
-                Text("Use a pad or control on Move to see recent note and CC events from the Mirror log.")
+                Text("Play a pad or move a physical control on Move. Recent note and CC events captured by Mirror will appear here.")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.vertical, 4)
             } else {
-                ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { _, event in
-                    Text(event)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
+                VStack(spacing: 5) {
+                    ForEach(Array(midiActivity.events.enumerated()), id: \.offset) { index, event in
+                        HStack(alignment: .top, spacing: 8) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Theme.success.opacity(index == 0 ? 0.95 : 0.35))
+                                .frame(width: 3)
+                            Text(event)
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color.white)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
                 }
             }
         }
+        .padding(.top, 2)
     }
 
     // MARK: Slot signal chain
