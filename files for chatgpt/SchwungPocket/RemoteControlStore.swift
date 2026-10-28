@@ -777,6 +777,20 @@ final class RemoteControlStore: ObservableObject {
                     RemoteDiagnostics.log("Master FX direct DSP lookup failed on \(scheme): \(error.localizedDescription)")
                 }
             }
+            // Compatibility fallback for older Manager builds that expose /api/modules
+            // but predate /api/slot-modules. Schwung's own Master FX tests document this
+            // exact installed DSP path for 4K EQ. Keep this narrowly scoped: guessing DSP
+            // paths for arbitrary modules is unsafe because module.json may name another file
+            // or the module may be installed in a different directory.
+            if module.id == "4k-eq",
+               lookupDiagnostics.contains(where: { $0.contains("HTTP 404") }) {
+                let legacyDSPPath = "/data/UserData/schwung/modules/audio_fx/4k-eq/4k-eq.so"
+                guard self.isConnected, case .masterFX = self.wireTarget else { return }
+                RemoteDiagnostics.log("Using documented legacy Manager DSP path for 4K EQ: \(legacyDSPPath)")
+                self.sendMasterFXLoad(module: module, component: component, dspPath: legacyDSPPath)
+                return
+            }
+
             let detail = lookupDiagnostics.joined(separator: " | ")
             self.slotModulesError = "Couldn't resolve \(module.name)'s DSP path. \(detail)"
             RemoteDiagnostics.log("Master FX swap failed: module=\(module.id); \(detail)")
