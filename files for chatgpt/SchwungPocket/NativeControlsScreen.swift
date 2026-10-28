@@ -52,6 +52,7 @@ struct NativeControlsScreen: View {
             destinationCard
             if isInstrumentSlot {
                 slotChainCard
+                parameterGroupCard
             } else if isMasterFX {
                 masterFXCard
             }
@@ -357,22 +358,34 @@ struct NativeControlsScreen: View {
                     .buttonStyle(StudioSecondaryButton())
                     .disabled(!remote.isConnected || remote.componentNames[selectedChainComponent.rawValue] == nil)
                 }
-                Group {
-                    if selectedChainComponent == .instrument && remote.levels.count > 1 {
+
+            }
+        }
+    }
+
+    private var parameterGroupCard: some View {
+        Group {
+            if selectedChainComponent == .instrument && remote.levels.count > 1 {
+                PocketCard {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("PARAMETER GROUP")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.2)
+                            .foregroundStyle(Theme.muted)
                         Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
                             ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
                         }
                         .pickerStyle(.menu)
                         .tint(Theme.accent)
-                    } else if selectedChainComponent != .instrument {
-                        Text("Controls for \(selectedChainComponent.title) appear below when Schwung reports editable parameters.")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .frame(minHeight: 30, alignment: .leading)
-                .transition(.opacity)
+            } else if selectedChainComponent != .instrument {
+                PocketCard {
+                    Text("Controls for \(selectedChainComponent.title) appear below when Schwung reports editable parameters.")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }
