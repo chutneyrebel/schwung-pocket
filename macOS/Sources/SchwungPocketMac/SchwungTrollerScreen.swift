@@ -385,7 +385,7 @@ struct SchwungTrollerScreen: View {
                                 Label("Clear", systemImage: "trash")
                                     .font(.system(size: 10, weight: .semibold))
                             }.buttonStyle(.bordered).tint(Theme.warning).disabled(!remote.isConnected || !loaded)
-                        }.fixedSize(horizontal: true)
+                        }.fixedSize(horizontal: true, vertical: true)
                     }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Theme.surfaceRaised, in: RoundedRectangle(cornerRadius: 10))
                         .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Theme.accent : Color.white.opacity(0.06), lineWidth: selected ? 2 : 1) }
