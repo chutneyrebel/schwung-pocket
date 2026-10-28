@@ -913,7 +913,7 @@ struct NativeControlsScreen: View {
                     HStack {
                         Text("0%")
                         Spacer()
-                        Text("100% reference")
+                        Text("Normal")
                         Spacer()
                         Text("400%")
                     }
