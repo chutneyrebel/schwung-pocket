@@ -1079,6 +1079,7 @@ private struct ParameterRow: View {
     let parameter: RemoteParameter
     @ObservedObject var remote: RemoteControlStore
     let diagnostics: Bool
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1108,20 +1109,44 @@ private struct ParameterRow: View {
 
     @ViewBuilder
     private var choicePicker: some View {
-        let binding = Binding<Int>(
-            get: { remote.currentChoiceIndex(for: parameter) },
-            set: { remote.setChoice($0, for: parameter) }
-        )
-        if parameter.options.count <= 3 {
-            Picker(parameter.name, selection: binding) {
-                ForEach(Array(parameter.options.enumerated()), id: \.offset) { item in Text(item.element).tag(item.offset) }
-            }
-            .pickerStyle(.segmented).tint(Theme.accent)
+        let selectedIndex = remote.currentChoiceIndex(for: parameter)
+        let columnCount = verticalSizeClass == .compact ? 8 : 5
+        if parameter.options.isEmpty {
+            Text("No options reported by Schwung.")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.muted)
         } else {
-            Picker(parameter.name, selection: binding) {
-                ForEach(Array(parameter.options.enumerated()), id: \.offset) { item in Text(item.element).tag(item.offset) }
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columnCount),
+                alignment: .leading,
+                spacing: 6
+            ) {
+                ForEach(Array(parameter.options.enumerated()), id: \.offset) { item in
+                    let isSelected = selectedIndex == item.offset
+                    Button {
+                        remote.setChoice(item.offset, for: parameter)
+                    } label: {
+                        Text(item.element)
+                            .font(.system(size: 10, weight: .semibold))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(isSelected ? Theme.accent : Color.white)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 3)
+                            .background(isSelected ? Theme.accent.opacity(0.16) : Theme.surfaceRaised,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(isSelected ? Theme.accent : Color.white.opacity(0.08), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(parameter.displayName): \(item.element)")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
             }
-            .pickerStyle(.menu).tint(Theme.accent)
         }
     }
 }
