@@ -1150,6 +1150,12 @@ private struct VerticalVolumeSlider: View {
 }
 
 
+private struct ModuleSwapGroup: Identifiable {
+    let title: String
+    let modules: [RemoteSlotModule]
+    var id: String { title }
+}
+
 private struct ModuleSwapSheet: View {
     @ObservedObject var remote: RemoteControlStore
     let address: String
@@ -1172,7 +1178,20 @@ private struct ModuleSwapSheet: View {
     private var choices: [RemoteSlotModule] {
         remote.availableSlotModules
             .filter { $0.componentType == expectedType && !$0.deviceOnly }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                let categoryOrder = $0.subcategoryTitle.localizedCaseInsensitiveCompare($1.subcategoryTitle)
+                if categoryOrder != .orderedSame { return categoryOrder == .orderedAscending }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
+
+    private var groupedChoices: [ModuleSwapGroup] {
+        let grouped = Dictionary(grouping: choices, by: \.subcategoryTitle)
+        return grouped.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .compactMap { title in
+                guard let modules = grouped[title], !modules.isEmpty else { return nil }
+                return ModuleSwapGroup(title: title, modules: modules)
+            }
     }
 
     var body: some View {
@@ -1192,19 +1211,24 @@ private struct ModuleSwapSheet: View {
                         Button("Retry module discovery") { remote.loadSlotModules(address: address) }
                     }
                 }
-                Section("Installed \(displayTitle) modules") {
-                    if choices.isEmpty {
+                if choices.isEmpty {
+                    Section("Installed \(displayTitle) modules") {
                         Text("No compatible modules found. Check that Schwung supports /api/slot-modules and try again.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(choices) { module in
-                        Button {
-                            pendingModule = module
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(module.name).foregroundStyle(.primary)
-                                Text(module.id).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                } else {
+                    ForEach(groupedChoices) { group in
+                        Section("\(displayTitle) · \(group.title)") {
+                            ForEach(group.modules) { module in
+                                Button {
+                                    pendingModule = module
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(module.name).foregroundStyle(.primary)
+                                        Text(module.id).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                         }
                     }

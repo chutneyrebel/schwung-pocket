@@ -67,9 +67,32 @@ struct RemoteSlotModule: Codable, Identifiable, Hashable {
     let dsp_path: String?
     let installed: Bool?
     let installed_version: String?
+    let subcategory: String?
 
     var componentType: String { component_type }
     var deviceOnly: Bool { device_only ?? false }
+
+    /// Human-readable Schwung catalog subcategory for the hot-swap browser.
+    var subcategoryTitle: String {
+        let value = (subcategory ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let labels: [String: String] = [
+            "polysynth": "Polysynth", "mono-bass": "Mono & Bass", "west-coast": "West Coast",
+            "fm": "FM", "wavetable": "Wavetable", "sampler-rompler": "Sampler & Rompler",
+            "drum-machine": "Drum Machine", "physical-modeling": "Physical Modeling",
+            "chiptune-retro": "Chiptune & Retro", "granular": "Granular", "macro-hybrid": "Macro & Hybrid",
+            "streaming-live-input": "Streaming & Live Input", "reverb": "Reverb", "delay-echo": "Delay & Echo",
+            "modulation": "Modulation", "distortion-saturation": "Distortion & Saturation", "dynamics": "Dynamics",
+            "filter-eq": "Filter & EQ", "granular-spectral": "Granular & Spectral",
+            "looper-sampler-fx": "Looper & Sampler FX", "multi-fx": "Multi-FX", "utility": "Utility",
+            "arpeggiator": "Arpeggiator", "sequencer": "Sequencer", "chord-harmony": "Chord & Harmony",
+            "routing-utility": "Routing & Utility", "sampling-editing": "Sampling & Editing",
+            "tuner-analysis": "Tuner & Analysis", "assistant": "Assistant", "performance": "Performance",
+            "controller": "Controller", "sampler-looper": "Sampler & Looper", "performance-fx": "Performance FX"
+        ]
+        if let label = labels[value] { return label }
+        guard !value.isEmpty else { return "Other / Uncategorised" }
+        return value.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
+    }
 }
 
 // MARK: - Parameters
@@ -113,13 +136,13 @@ struct RemoteParameter: Identifiable, Hashable {
         case "init":
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
         case "canvas":
-            // Explicit options provide a safe discrete control; custom canvas metadata without
-            // options remains read-only because its interaction semantics cannot be inferred.
+            // Explicit options provide a safe discrete control; canvas screens without options
+            // are module-rendered interfaces and cannot be represented by a generic parameter row.
             return options.isEmpty
-                ? .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
+                ? .readOnly(reason: "Schwung renders this as a module-specific canvas screen. Its editor is not exposed as standard parameter controls here, so no values are sent.")
                 : .choice
         case "filepath":
-            return .readOnly(reason: "This is a module-specific control managed by Schwung, not a standard numeric or choice control. It is shown read-only here.")
+            return .readOnly(reason: "This parameter selects a file on the Move. The native app does not yet expose Schwung's Move-side file browser, so the path remains read-only rather than accepting an iPhone-local path.")
         case "tool_read_only":
             return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")
         default:
@@ -167,7 +190,7 @@ struct RemoteParameter: Identifiable, Hashable {
         return RemoteParameter(
             component: component,
             key: key,
-            name: item["name"] as? String ?? key.replacingOccurrences(of: "_", with: " ").capitalized,
+            name: item["name"] as? String ?? item["label"] as? String ?? key.replacingOccurrences(of: "_", with: " ").capitalized,
             shortName: item["short_name"] as? String ?? "",
             type: type,
             minimum: number(item["min"]) ?? 0,

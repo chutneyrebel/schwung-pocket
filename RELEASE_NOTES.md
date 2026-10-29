@@ -218,4 +218,17 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 
 ## Per-build notes
 
+### Build #312 · commit `f0ffa12475683cfbc866e879f998e568eb1821bd`
+- **Build-verified:** unsigned iPhone IPA compiled and packaged successfully in GitHub Actions run [#312](https://github.com/chutneyrebel/schwung-pocket/actions/runs/40717315392).
+- **User-verified:** the user confirmed the tab/page-switch delay is gone.
+- Kept SchwungTroller mounted after first visit to preserve its remote store and avoid redundant reconnects when returning to the tab.
+- Moved the default section order to Four-slot Mixer, then Connection & MIDI Activity. Existing saved section order remains respected.
+- Canvas parameters with explicit option lists can use the choice UI; canvas screens without options and Move-side file paths remain read-only because the app has no safe native editor for those interactions.
+
+### Next batch · in progress
+- Preserve Schwung catalog subcategories through installed-module discovery and group the compatible hot-swap picker by those categories.
+- Prefer Schwung's `label` metadata for parameter names when `name` is absent, improving Breakbeat's declared labels without guessing control types.
+- Keep the existing five-column portrait and eight-column landscape choice layouts.
+- **Deferred:** new Master FX Clear, Tool Clear and transport controls.
+
 The build workflow appends the current commit, branch, run number and build timestamp to this document when uploading the `SchwungPocket-release-notes` artifact. The cumulative history above remains in source control; update it whenever a feature, fix, limitation or test result changes.

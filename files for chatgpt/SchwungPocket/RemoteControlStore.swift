@@ -531,7 +531,8 @@ final class RemoteControlStore: ObservableObject {
                                 device_only: module.device_only ?? installedMatch?.device_only ?? false,
                                 dsp_path: path,
                                 installed: module.installed ?? (installedMatch != nil),
-                                installed_version: module.installed_version
+                                installed_version: module.installed_version,
+                                subcategory: module.subcategory ?? installedMatch?.subcategory
                             )
                         }
 
@@ -551,7 +552,8 @@ final class RemoteControlStore: ObservableObject {
                                 device_only: installedModule.device_only,
                                 dsp_path: installedModule.dsp_path,
                                 installed: true,
-                                installed_version: installedModule.installed_version
+                                installed_version: installedModule.installed_version,
+                                subcategory: installedModule.subcategory
                             ))
                         }
                     }
