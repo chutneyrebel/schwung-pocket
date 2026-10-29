@@ -134,12 +134,12 @@ struct RemoteParameter: Identifiable, Hashable {
 
         var details: [String] = []
         if let root = definition["root"] as? String, !root.isEmpty {
-            details.append("Folder: \\(root)")
+            details.append("Folder: \(root)")
         }
         if let filter = definition["filter"] as? String, !filter.isEmpty {
-            details.append("Files: \\(filter)")
+            details.append("Files: \(filter)")
         } else if let filters = definition["filter"] as? [String], !filters.isEmpty {
-            details.append("Files: \\(filters.joined(separator: ", ")))")
+            details.append("Files: \(filters.joined(separator: ", "))")
         }
         return details.isEmpty ? nil : details.joined(separator: "  ·  ")
     }
