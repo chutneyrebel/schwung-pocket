@@ -2,7 +2,7 @@
 
 > **Purpose:** These cumulative notes ship with every build so testers can re-check existing behaviour, not only the newest change.
 >
-> **Branch:** `v0.8.3-development`  
+> **Active development branch:** `v0.9-development`  
 > **Source of truth:** `files for chatgpt/SchwungPocket/` and the sibling `files for chatgpt/SchwungPocket.xcodeproj/`.  
 > **Safety:** Do not merge or push this work to `main` unless explicitly requested.
 
@@ -108,7 +108,7 @@
 - **Regression check:** verify the file interface loads, navigation works, and the app returns to the correct screen after leaving and reopening it.
 
 ### Build and delivery workflow
-- GitHub Actions builds on pushes to `v0.8.3-development`, manual workflow dispatch, and pull requests targeting `main`.
+- GitHub Actions builds on pushes to `v0.8.3-development` and `v0.9-development`, manual workflow dispatch, and pull requests targeting `main`.
 - Workflow locates the Xcode project or supported source archive, generates a shared Xcode scheme, parses Swift sources, runs an unsigned Release build for iPhoneOS, packages an unsigned IPA, and uploads the IPA and build log.
 - Artifacts are retained for seven days.
 - A green workflow confirms syntax/build/package steps only. It does not confirm installation, runtime behaviour, network connectivity or hardware control.
@@ -239,3 +239,9 @@ The build workflow appends the current commit, branch, run number and build time
 - Removed the redundant performance status strip that repeated connection state already shown in the Connection & MIDI Activity card.
 - Kept the primary Connection & MIDI Activity section at the top; the performance mixer follows it directly, avoiding two separate connected/status panels.
 - **Testing note:** confirm the page shows one connection section only and that Connect/Disconnect, Reload, MIDI activity and destination selection remain available.
+
+### v0.9 follow-up · Breakbeat filepath metadata
+- Replaced the Breakbeat-specific filepath warning with a generic explanation that file paths require the Move-side browser and are not normal editable parameters.
+- When Schwung supplies `root` and `filter` metadata, SchwungTroller now displays the reported folder and accepted file types beside the read-only explanation. This is informational only; it does not guess or send a path write.
+- Protocol investigation found no documented file-browse/list action in the current Remote UI WebSocket messages. A native in-app picker remains blocked until Schwung exposes a supported browsing route or a compatible module UI can be embedded.
+- **Testing note:** confirm Breakbeat's A/B sample paths remain read-only, the reported folder/filter are shown when present, and ordinary numeric/choice parameters still work.

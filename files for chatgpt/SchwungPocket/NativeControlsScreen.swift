@@ -1509,6 +1509,13 @@ private struct ParameterRow: View {
                 choicePicker
             case .readOnly(let reason):
                 Text(reason).font(.system(size: 10)).foregroundStyle(Theme.muted)
+                if let filepathDetails = parameter.filepathDetails {
+                    Text(filepathDetails)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(Theme.accent.opacity(0.9))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 DisclosureGroup("Raw definition") {
                     Text(parameter.rawDefinition)
                         .font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)

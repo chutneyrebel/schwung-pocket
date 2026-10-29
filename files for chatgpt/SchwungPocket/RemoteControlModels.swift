@@ -124,6 +124,26 @@ struct RemoteParameter: Identifiable, Hashable {
     var wireKey: String { key.contains(":") ? key : component + ":" + key }
     var displayName: String { shortName.isEmpty ? name : shortName }
 
+    /// Human-readable file-picker constraints reported by Schwung metadata.
+    /// This is display-only; the app does not infer or write a path from it.
+    var filepathDetails: String? {
+        guard type == "filepath",
+              let data = rawDefinition.data(using: .utf8),
+              let definition = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        var details: [String] = []
+        if let root = definition["root"] as? String, !root.isEmpty {
+            details.append("Folder: \\(root)")
+        }
+        if let filter = definition["filter"] as? String, !filter.isEmpty {
+            details.append("Files: \\(filter)")
+        } else if let filters = definition["filter"] as? [String], !filters.isEmpty {
+            details.append("Files: \\(filters.joined(separator: ", ")))")
+        }
+        return details.isEmpty ? nil : details.joined(separator: "  ·  ")
+    }
+
     var kind: RemoteControlKind {
         switch type {
         case "float":
@@ -142,7 +162,7 @@ struct RemoteParameter: Identifiable, Hashable {
                 ? .readOnly(reason: "Custom Schwung status screen. This module draws its own interface (`status_view.js`); the native parameter panel cannot render that script yet. This is informational, not a connection error.")
                 : .choice
         case "filepath":
-            return .readOnly(reason: "Move-side sample picker required. This parameter points to a WAV file in the Breakbeat samples folder on the Move. The native app does not yet expose that picker, so it cannot safely change the sample here.")
+            return .readOnly(reason: "Move-side file picker required. Schwung reports this as a file path, not a normal editable parameter. The native app does not yet expose the Move's file browser, so no file-path writes will be sent.")
         case "tool_read_only":
             return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")
         default:
