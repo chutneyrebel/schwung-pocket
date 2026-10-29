@@ -3,24 +3,43 @@ import Foundation
 import UIKit
 
 private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
-    case home, modules, mirror, manager, settings
+    case home, nativeControls, modules, mirror, manager, files, settings
     var id: String { rawValue }
     var title: String {
         switch self {
         case .home: return "Home"
+        case .nativeControls: return "SchwungTroller"
         case .modules: return "Modules"
         case .mirror: return "Mirror"
         case .manager: return "Manager"
+        case .files: return "Files"
         case .settings: return "Settings"
         }
     }
     var symbol: String {
         switch self {
         case .home: return "waveform.path"
+        case .nativeControls: return "dial.medium"
         case .modules: return "square.grid.2x2.fill"
         case .mirror: return "rectangle.inset.filled"
         case .manager: return "slider.horizontal.3"
+        case .files: return "folder"
         case .settings: return "gearshape"
+        }
+    }
+}
+
+
+private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
+    case connection, mixer, signalChain, parameters, slotSettings
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .connection: return "Connection & MIDI Activity"
+        case .mixer: return "Four-slot Mixer"
+        case .signalChain: return "Signal Chain & Installed Modules"
+        case .parameters: return "Parameter Controls"
+        case .slotSettings: return "Slot Settings"
         }
     }
 }
@@ -28,84 +47,238 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
 struct ContentView: View {
     @ObservedObject var device: MoveConnectionStore
     @State private var selectedTab: PocketTab = .home
-    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
+    @State private var hasOpenedNativeControls = false
+    @State private var selectedStudioModule: PocketStudioModule?
+    @State private var navigationHidden = false
+    @State private var navigationHideTask: Task<Void, Never>?
+    @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,nativeControls,modules,mirror,manager,files,settings"
+    @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 1
+    @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
+
+    private var shouldAutoHideNavigationForSelectedTab: Bool {
+        navigationAutoHideEnabled &&
+        Set(navigationAutoHideTabs.split(separator: ",").map(String.init)).contains(selectedTab.rawValue)
+    }
 
     private var orderedTabs: [PocketTab] {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
         // Migrate v0.4.2's saved order, which included Vault and had no Modules tab.
         if storedTabOrder.contains("vault") || !saved.contains(.modules) {
-            return [.home, .modules, .mirror, .manager, .settings]
+            // Migrate older saved orders without dropping the new Files destination.
+            return [.home, .nativeControls, .modules, .mirror, .manager, .files, .settings]
         }
-        return saved + PocketTab.allCases.filter { !saved.contains($0) }
+        // Always keep Settings at the far right, including for users with an older saved tab order.
+        let completed = saved + PocketTab.allCases.filter { !saved.contains($0) }
+        return completed.filter { $0 != .settings } + [.settings]
     }
 
     @ViewBuilder
     private func content(for tab: PocketTab) -> some View {
         switch tab {
         case .home:
-            HomeScreen(device: device, openModules: { selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .settings }, openSettings: { selectedTab = .settings })
+            HomeScreen(device: device, openModules: { selectedTab = .modules }, openStudioModule: { module in selectedStudioModule = module; selectedTab = .modules }, openManager: { selectedTab = .manager }, openMirror: { selectedTab = .mirror }, openVault: { selectedTab = .files }, openSettings: { selectedTab = .settings })
+        case .nativeControls:
+            NativeControlsScreen(device: device)
         case .modules:
-            ModuleHubScreen(device: device, showsCloseButton: false)
+            if let module = selectedStudioModule {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button {
+                            selectedStudioModule = nil
+                        } label: {
+                            Label("All modules", systemImage: "chevron.left")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        Spacer()
+                        Text(module.title.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(Theme.background)
+                    module.destination(device: device)
+                }
+            } else {
+                ModuleHubScreen(device: device, showsCloseButton: false)
+            }
+        case .mirror:
+            EmptyView() // Mirror remains mounted in the parent ZStack.
         case .manager:
             ManagerScreen(device: device)
-        case .mirror:
-            MirrorScreen(device: device)
+        case .files:
+            FilesScreen(device: device)
         case .settings:
             ConnectionSettingsScreen(device: device)
         }
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(orderedTabs) { tab in
-                content(for: tab)
-                    .tabItem { Label(tab.title, systemImage: tab.symbol) }
-                    .tag(tab)
+        ZStack {
+            // Keep the Mirror WKWebView mounted while other sections are open so portal audio continues.
+            MirrorScreen(device: device, navigationHidden: navigationHidden, navigationAutoHideEnabled: navigationAutoHideEnabled)
+                .opacity(selectedTab == .mirror ? 1 : 0)
+                .allowsHitTesting(selectedTab == .mirror)
+                .accessibilityHidden(selectedTab != .mirror)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Keep SchwungTroller alive after its first visit. Its WebSocket and module
+            // metadata then survive tab changes instead of reconnecting on every return.
+            if hasOpenedNativeControls {
+                NativeControlsScreen(device: device)
+                    .opacity(selectedTab == .nativeControls ? 1 : 0)
+                    .allowsHitTesting(selectedTab == .nativeControls)
+                    .accessibilityHidden(selectedTab != .nativeControls)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            if selectedTab != .mirror && selectedTab != .nativeControls {
+                content(for: selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .toolbarBackground(Theme.background, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
         .background(Theme.background.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            let footerVisible = !navigationHidden || !shouldAutoHideNavigationForSelectedTab
+            bottomNavigation
+                .frame(height: footerVisible ? 64 : 0, alignment: .top)
+                .opacity(footerVisible ? 1 : 0)
+                .allowsHitTesting(footerVisible)
+                .accessibilityHidden(!footerVisible)
+                .background {
+                    if footerVisible {
+                        Theme.background.ignoresSafeArea(edges: .bottom)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: footerVisible)
+        }
+        .simultaneousGesture(TapGesture().onEnded { revealNavigation() })
+        .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in revealNavigation() })
+        .onAppear { scheduleNavigationHide() }
+        .onChange(of: selectedTab) { tab in
+            if tab == .nativeControls { hasOpenedNativeControls = true }
+            revealNavigation()
+        }
+        .onChange(of: navigationAutoHideEnabled) { enabled in
+            if enabled { scheduleNavigationHide() }
+            else {
+                navigationHideTask?.cancel()
+                withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+            }
+        }
+        .onChange(of: navigationAutoHideSeconds) { _ in scheduleNavigationHide() }
+        .onChange(of: navigationAutoHideTabs) { _ in scheduleNavigationHide() }
+        .onDisappear { navigationHideTask?.cancel() }
+    }
+
+    private var bottomNavigation: some View {
+        HStack(spacing: 0) {
+            ForEach(orderedTabs) { tab in
+                Button {
+                    if tab == .nativeControls { hasOpenedNativeControls = true }
+                    selectedTab = tab
+                    if tab == .modules { selectedStudioModule = nil }
+                    revealNavigation()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: tab.symbol)
+                            .font(.system(size: 17, weight: selectedTab == tab ? .semibold : .regular))
+                        Text(tab.title)
+                            .font(.system(size: 10, weight: selectedTab == tab ? .semibold : .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selectedTab == tab ? Theme.accent : Theme.muted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+            }
+        }
+        .padding(.horizontal, 5)
+        .padding(.top, 4)
+        .background(Theme.background.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, maxHeight: 64, alignment: .top)
+    }
+
+    private func revealNavigation() {
+        withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+        scheduleNavigationHide()
+    }
+
+    private func scheduleNavigationHide() {
+        navigationHideTask?.cancel()
+        guard shouldAutoHideNavigationForSelectedTab else {
+            withAnimation(.easeInOut(duration: 0.18)) { navigationHidden = false }
+            return
+        }
+        navigationHideTask = Task { @MainActor in
+            let seconds = max(1, min(60, navigationAutoHideSeconds))
+            try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+            guard !Task.isCancelled, shouldAutoHideNavigationForSelectedTab else { return }
+            withAnimation(.easeInOut(duration: 0.2)) { navigationHidden = true }
+        }
     }
 }
 
 private enum FavoriteDestination: String, CaseIterable, Identifiable {
-    case manager, mirror, vault, settings
+    case modules, nativeControls, sampleLab, grooveToolkit, manager, mirror, files, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .modules: return "Modules"
+        case .nativeControls: return "SchwungTroller"
+        case .sampleLab: return "Sample Lab"
+        case .grooveToolkit: return "Groove Toolkit"
         case .manager: return "Manager"
         case .mirror: return "Screen mirror"
-        case .vault: return "Sample & Set Vault"
+        case .files: return "Files"
         case .settings: return "Connection settings"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .manager: return "Modules, files, config"
+        case .modules: return "Browse installed companion modules"
+        case .nativeControls: return "Live instrument controls"
+        case .sampleLab: return "Audition samples on iPhone"
+        case .grooveToolkit: return "Build and export MIDI grooves"
+        case .manager: return "Schwung Manager pages"
         case .mirror: return "Move display + LEDs"
-        case .vault: return "Audio, Sets, tags and backups"
+        case .files: return "Browse files on Move"
         case .settings: return "Device address and status"
         }
     }
 
     var symbol: String {
         switch self {
+        case .modules: return "square.grid.2x2.fill"
+        case .nativeControls: return "dial.medium"
+        case .sampleLab: return "waveform"
+        case .grooveToolkit: return "circle.grid.3x3.fill"
         case .manager: return "slider.horizontal.3"
         case .mirror: return "rectangle.inset.filled"
-        case .vault: return "archivebox"
+        case .files: return "folder"
         case .settings: return "network"
         }
     }
 
     var tint: Color {
         switch self {
+        case .modules: return Theme.violet
+        case .nativeControls: return Theme.accent
+        case .sampleLab: return Theme.blue
+        case .grooveToolkit: return Theme.violet
         case .manager: return Theme.violet
         case .mirror: return Theme.blue
-        case .vault: return Theme.accent
+        case .files: return Theme.accent
         case .settings: return Theme.warning
         }
     }
@@ -114,12 +287,13 @@ private enum FavoriteDestination: String, CaseIterable, Identifiable {
 private struct HomeScreen: View {
     @ObservedObject var device: MoveConnectionStore
     let openModules: () -> Void
+    let openStudioModule: (PocketStudioModule) -> Void
     let openManager: () -> Void
     let openMirror: () -> Void
     let openVault: () -> Void
     let openSettings: () -> Void
 
-    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "manager,mirror,vault"
+    @AppStorage("SchwungPocket.FavouriteActions") private var favouriteIDs = "modules,nativeControls,sampleLab,grooveToolkit,manager,mirror,files,settings"
     @State private var showingFavouriteEditor = false
 
     private var favouriteDestinations: [FavoriteDestination] {
@@ -310,9 +484,13 @@ private struct HomeScreen: View {
 
     private func open(_ destination: FavoriteDestination) {
         switch destination {
+        case .modules: openModules()
+        case .nativeControls: openStudioModule(.nativeControls)
+        case .sampleLab: openStudioModule(.sampleLab)
+        case .grooveToolkit: openStudioModule(.grooveToolkit)
         case .manager: openManager()
         case .mirror: openMirror()
-        case .vault: openVault()
+        case .files: openVault()
         case .settings: openSettings()
         }
     }
@@ -1159,6 +1337,28 @@ private struct ManagerScreen: View {
     }
 }
 
+private struct FilesScreen: View {
+    @ObservedObject var device: MoveConnectionStore
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let url = device.filesURL {
+                    ManagerWebView(url: url)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    InvalidAddressView()
+                }
+            }
+            .background(Theme.background)
+            .navigationTitle("Files")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.background, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+}
+
 private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
     case both, top, bottom
     var id: String { rawValue }
@@ -1180,6 +1380,9 @@ private enum MirrorDisplayMode: String, CaseIterable, Identifiable {
 
 private struct MirrorScreen: View {
     @ObservedObject var device: MoveConnectionStore
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    let navigationHidden: Bool
+    let navigationAutoHideEnabled: Bool
     @State private var reloadToken = UUID()
     @State private var isFullScreen = false
     @State private var recordTrigger: UUID?
@@ -1209,8 +1412,8 @@ private struct MirrorScreen: View {
                         audioTrigger: audioTrigger,
                         onAudioControlResult: { result in
                             audioTrigger = nil
-                            if result != "enabled" {
-                                recordMessage = "The portal audio control was not found. Try tapping Unmute on the web page once, then use this shortcut again."
+                            if result == "not-found" {
+                                recordMessage = "The portal audio control was not found. Try using the audio control on the web page once, then use this shortcut again."
                                 showingRecordMessage = true
                             }
                         },
@@ -1230,48 +1433,65 @@ private struct MirrorScreen: View {
                     InvalidAddressView()
                 }
 
-                HStack(spacing: 10) {
-                    Menu {
-                        ForEach(MirrorDisplayMode.allCases) { mode in
-                            Button {
-                                savedMirrorDisplayMode = mode.rawValue
-                            } label: {
-                                if mirrorDisplayMode == mode {
-                                    Label(mode.title, systemImage: "checkmark")
-                                } else {
-                                    Text(mode.title)
+                VStack(spacing: 0) {
+                    if verticalSizeClass != .compact {
+                        HStack(spacing: 0) {
+                            Button { audioTrigger = UUID() } label: { Label("Audio", systemImage: "speaker.wave.2.fill").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                                .accessibilityLabel("Toggle mirror audio mute")
+                            Button { recordTrigger = UUID() } label: { Label(isRecording ? "Stop" : "Record", systemImage: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 12, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 42) }
+                                .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                        }
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 6)
+                        .background(Theme.surfaceRaised)
+                        .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
+                    }
+                    HStack(spacing: 0) {
+                        if verticalSizeClass == .compact {
+                            Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                                .accessibilityLabel("Toggle mirror audio mute")
+                            Button { recordTrigger = UUID() } label: { Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                                .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
+                        }
+                        Menu {
+                            ForEach(MirrorDisplayMode.allCases) { mode in
+                                Button {
+                                    savedMirrorDisplayMode = mode.rawValue
+                                } label: {
+                                    HStack {
+                                        Text(mode.title)
+                                        if mirrorDisplayMode == mode {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
                                 }
                             }
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: mirrorDisplayMode.symbol).font(.system(size: 17, weight: .semibold))
+                                Text(mirrorDisplayMode.title).font(.system(size: 10, weight: .semibold)).lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 46)
+                            .contentShape(Rectangle())
                         }
-                    } label: {
-                        Label(mirrorDisplayMode.title, systemImage: mirrorDisplayMode.symbol)
-                            .font(.system(size: 12, weight: .semibold))
+                        .accessibilityLabel("Choose mirrored display layout")
+                        Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Zoom out")
+                        Text("\(Int(mirrorZoom * 100))%").font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(Theme.muted).frame(maxWidth: .infinity, minHeight: 46)
+                        Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Zoom in")
+                        Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Refresh Move mirror")
+                        Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 21, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 46) }
+                            .accessibilityLabel("Open full-screen mirror")
                     }
-                    .accessibilityLabel("Choose mirrored display layout")
-
-                    Button { mirrorZoom = max(0.75, mirrorZoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass") }
-                        .accessibilityLabel("Zoom out")
-                    Text("\(Int(mirrorZoom * 100))%")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white)
-                    Button { mirrorZoom = min(1.6, mirrorZoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
-                        .accessibilityLabel("Zoom in")
-                    Button { audioTrigger = UUID() } label: { Image(systemName: "speaker.wave.2.fill") }
-                        .accessibilityLabel("Enable mirror audio")
-                    Button { recordTrigger = UUID() } label: {
-                        Image(systemName: isRecording ? "stop.circle.fill" : "record.circle")
-                    }
-                    .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
-                    Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise") }
-                        .accessibilityLabel("Refresh Move mirror")
-                    Button { isFullScreen = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
-                        .accessibilityLabel("Open full-screen mirror")
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 6)
+                    .background(Theme.background.opacity(0.98))
+                    .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Theme.surface)
-
+                .padding(.bottom, (!navigationHidden || !navigationAutoHideEnabled) ? 62 : 0)
 
             }
             .background(Theme.background)
@@ -1306,6 +1526,11 @@ private struct FullscreenMirrorView: View {
     @State private var showingRecordMessage = false
     @State private var recordMessage = ""
     @AppStorage("SchwungPocket.MirrorKeepAwake.v1") private var keepAwake = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var controlsAutoHideEnabled = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var controlsAutoHideSeconds = 1
+    @State private var showControlsButton = false
+    @State private var controlsButtonHideTask: Task<Void, Never>?
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -1319,10 +1544,10 @@ private struct FullscreenMirrorView: View {
                 audioTrigger: audioTrigger,
                 onAudioControlResult: { result in
                     audioTrigger = nil
-                    if result != "enabled" {
-                        recordMessage = "The portal audio control was not found. Try tapping Unmute on the web page once, then use this shortcut again."
-                        showingRecordMessage = true
-                    }
+                    if result == "not-found" {
+                                recordMessage = "The portal audio control was not found. Try using the audio control on the web page once, then use this shortcut again."
+                                showingRecordMessage = true
+                            }
                 },
                 onRecordControlResult: { result in
                     recordTrigger = nil
@@ -1343,86 +1568,129 @@ private struct FullscreenMirrorView: View {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Button { dismiss() } label: {
-                            Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                            Image(systemName: "xmark").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Exit full-screen mirror")
                         Spacer()
-                        Menu {
-                            ForEach(MirrorDisplayMode.allCases) { mode in
-                                Button {
-                                    displayModeSelection = mode.rawValue
-                                } label: {
-                                    if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") }
-                                    else { Text(mode.title) }
+                        if verticalSizeClass == .compact {
+                            HStack(spacing: 6) {
+                                ForEach(MirrorDisplayMode.allCases) { mode in
+                                    Button { displayModeSelection = mode.rawValue } label: {
+                                        VStack(spacing: 3) {
+                                            Image(systemName: mode.symbol).font(.system(size: 18.75, weight: .semibold))
+                                            Text(mode.title).font(.system(size: 9, weight: .bold, design: .monospaced))
+                                        }
+                                        .foregroundStyle(displayModeSelection == mode.rawValue ? Theme.accent : Theme.muted)
+                                        .frame(width: 60, height: 57.5)
+                                        .background(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.16) : Theme.background.opacity(0.97), in: RoundedRectangle(cornerRadius: 10))
+                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(displayModeSelection == mode.rawValue ? Theme.accent.opacity(0.75) : Color.white.opacity(0.12), lineWidth: 1))
+                                    }
+                                    .accessibilityLabel("Show \(mode.title) display")
+                                    .accessibilityAddTraits(displayModeSelection == mode.rawValue ? .isSelected : [])
                                 }
                             }
-                        } label: {
-                            Text("\(displayModeSelection.capitalized) · \(Int(zoom * 100))%")
-                                .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                                .background(.black.opacity(0.72), in: Capsule())
+                        } else {
+                            Menu {
+                                ForEach(MirrorDisplayMode.allCases) { mode in
+                                    Button { displayModeSelection = mode.rawValue } label: {
+                                        if displayModeSelection == mode.rawValue { Label(mode.title, systemImage: "checkmark") } else { Text(mode.title) }
+                                    }
+                                }
+                            } label: {
+                                Label((MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).title, systemImage: (MirrorDisplayMode(rawValue: displayModeSelection) ?? .both).symbol)
+                                    .font(.system(size: 11, weight: .heavy, design: .monospaced)).tracking(0.5)
+                                    .foregroundStyle(Theme.accent)
+                                    .padding(.horizontal, 12).padding(.vertical, 10)
+                                    .background(Theme.background.opacity(0.97), in: Capsule())
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            }
                         }
                         Button { audioTrigger = UUID() } label: {
-                            Image(systemName: "speaker.wave.2.fill").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                            Image(systemName: "speaker.wave.2.fill").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Enable mirror audio")
                         Button { recordTrigger = UUID() } label: {
-                            Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                            Image(systemName: isRecording ? "stop.circle.fill" : "record.circle").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel(isRecording ? "Stop mirror portal screen recording" : "Start mirror portal screen recording")
                         Button { reloadToken = UUID(); Task { await device.checkConnection() } } label: {
-                            Image(systemName: "arrow.clockwise").font(.system(size: 14, weight: .bold))
-                                .frame(width: 38, height: 38).background(.black.opacity(0.72), in: Circle())
+                            Image(systemName: "globe").font(.system(size: 17.5, weight: .bold))
+                                .frame(width: 52.5, height: 52.5).foregroundStyle(Theme.accent).background(Theme.background.opacity(0.97), in: Circle()).overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Refresh full-screen mirror")
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.top, 10)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Theme.background, in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
                     Spacer()
-                    HStack(spacing: 12) {
-                        HStack(spacing: 5) {
-                            Circle().fill(device.status == .connected ? Theme.success : (device.status == .checking ? Theme.accent : Color.red)).frame(width: 7, height: 7)
-                            Text(device.status == .connected ? "Move reachable" : device.status == .checking ? "Checking Move" : "Move offline")
-                                .font(.system(size: 10, weight: .semibold))
-                                .lineLimit(1)
-                        }
-                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "antenna.radiowaves.left.and.right") }
-                            .accessibilityLabel("Check Move connection")
-                        Divider().frame(height: 22).overlay(.white.opacity(0.35))
-                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass") }
+                    HStack(spacing: 14) {
+                        Circle().fill(device.status == .connected ? Theme.success : (device.status == .checking ? Theme.accent : Color.red)).frame(width: 9, height: 9)
+                            .accessibilityLabel(device.status == .connected ? "Move connected" : device.status == .checking ? "Checking Move connection" : "Move offline")
+                        Button { Task { await device.checkConnection() } } label: { Image(systemName: "arrow.clockwise").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
+                            .accessibilityLabel("Refresh Move connection")
+                        Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
+                        Button { zoom = max(0.75, zoom - 0.1) } label: { Image(systemName: "minus.magnifyingglass").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom out")
-                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass") }
+                        Text("\(Int(zoom * 100))%").font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).frame(minWidth: 42)
+                            .accessibilityLabel("Mirror zoom \(Int(zoom * 100)) percent")
+                        Button { zoom = min(1.6, zoom + 0.1) } label: { Image(systemName: "plus.magnifyingglass").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold)) }
                             .accessibilityLabel("Zoom in")
-                        Divider().frame(height: 22).overlay(.white.opacity(0.35))
+                        Divider().frame(height: 22).overlay(Theme.muted.opacity(0.45))
                         Button { keepAwake.toggle(); UIApplication.shared.isIdleTimerDisabled = keepAwake } label: {
-                            Label(keepAwake ? "Keep Awake" : "Allow Sleep", systemImage: keepAwake ? "sun.max.fill" : "moon.zzz")
+                            VStack(spacing: 4) {
+                                Image(systemName: keepAwake ? "sun.max.fill" : "moon.zzz")
+                                    .font(.system(size: verticalSizeClass == .compact ? 22.5 : 17.5, weight: .semibold))
+                                Text(keepAwake ? "Keep Awake" : "Allow Sleep")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .frame(minWidth: 82, minHeight: verticalSizeClass == .compact ? 48 : 42)
+                            .contentShape(Rectangle())
                         }
-                        Button { controlsVisible = false } label: { Image(systemName: "eye.slash") }
-                            .accessibilityLabel("Hide mirror controls")
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = false }
+                            revealControlsButton()
+                        } label: {
+                            Image(systemName: "eye.slash").font(.system(size: verticalSizeClass == .compact ? 22.5 : 18, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .accessibilityLabel("Hide mirror controls")
                     }
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 16).padding(.vertical, 12)
-                    .background(.black.opacity(0.72), in: Capsule())
+                    .background(Theme.background.opacity(0.97), in: Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
                     .padding(.bottom, 18)
                 }
                 .transition(.opacity)
-            } else {
+            } else if showControlsButton || !controlsAutoHideEnabled {
                 VStack {
                     HStack {
                         Spacer()
-                        Button { withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true } } label: {
-                            Image(systemName: "eye").font(.system(size: 13, weight: .bold))
-                                .frame(width: 36, height: 36).background(.black.opacity(0.72), in: Circle())
+                        Button {
+                            controlsButtonHideTask?.cancel()
+                            withAnimation(.easeInOut(duration: 0.15)) { controlsVisible = true }
+                            showControlsButton = false
+                        } label: {
+                            Image(systemName: "eye").font(.system(size: verticalSizeClass == .compact ? 18.75 : 15, weight: .bold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 38, height: 38)
+                                .background(Theme.background.opacity(0.97), in: Circle())
+                                .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
                         }
                         .accessibilityLabel("Show mirror controls")
                     }
                     Spacer()
                 }
                 .padding(12)
+                .transition(.opacity)
             }
         }
         .foregroundStyle(.white)
@@ -1434,11 +1702,34 @@ private struct FullscreenMirrorView: View {
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = keepAwake }
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { if !controlsVisible { revealControlsButton() } })
+        .simultaneousGesture(DragGesture(minimumDistance: 1).onChanged { _ in if !controlsVisible { revealControlsButton() } })
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = keepAwake
+            if !controlsVisible { revealControlsButton() }
+        }
+        .onChange(of: controlsAutoHideEnabled) { enabled in
+            if enabled && !controlsVisible { revealControlsButton() }
+            else { controlsButtonHideTask?.cancel(); showControlsButton = !enabled && !controlsVisible }
+        }
+        .onChange(of: controlsAutoHideSeconds) { _ in if showControlsButton { revealControlsButton() } }
         .onChange(of: keepAwake) { newValue in UIApplication.shared.isIdleTimerDisabled = newValue }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear { controlsButtonHideTask?.cancel(); UIApplication.shared.isIdleTimerDisabled = false }
     }
 
+    private func revealControlsButton() {
+        controlsButtonHideTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.15)) { showControlsButton = true }
+        guard controlsAutoHideEnabled else { return }
+        controlsButtonHideTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(max(1, controlsAutoHideSeconds)) * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.15)) { showControlsButton = false }
+            }
+        }
+    }
 }
 
 private struct ConnectionSettingsScreen: View {
@@ -1448,8 +1739,29 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.SelectedMoveID.v1") private var selectedMoveID = ""
     @AppStorage("SchwungPocket.DefaultMoveID.v1") private var defaultMoveID = ""
     @AppStorage("SchwungPocket.BottomTabOrder.v1") private var storedTabOrder = "home,modules,mirror,manager,settings"
+    @AppStorage("SchwungPocket.NavigationAutoHideEnabled") private var navigationAutoHideEnabled = true
+    @AppStorage("SchwungPocket.NavigationAutoHideSeconds") private var navigationAutoHideSeconds = 1
+    @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
+    @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 1
+    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedTrollerSectionOrder = "connection,mixer,signalChain,parameters,slotSettings"
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
+
+
+    private var orderedTrollerSections: [TrollerPreferenceSection] {
+        let saved = storedTrollerSectionOrder.split(separator: ",").compactMap { TrollerPreferenceSection(rawValue: String($0)) }
+        return saved + TrollerPreferenceSection.allCases.filter { !saved.contains($0) }
+    }
+
+    private func moveTrollerSection(from index: Int, by offset: Int) {
+        var sections = orderedTrollerSections
+        let destination = index + offset
+        guard sections.indices.contains(index), sections.indices.contains(destination) else { return }
+        let item = sections.remove(at: index)
+        sections.insert(item, at: destination)
+        storedTrollerSectionOrder = sections.map(\.rawValue).joined(separator: ",")
+    }
 
     private var savedMoves: [SavedMoveProfile] {
         guard let data = savedMovesJSON.data(using: .utf8), let decoded = try? JSONDecoder().decode([SavedMoveProfile].self, from: data) else { return [] }
@@ -1459,9 +1771,11 @@ private struct ConnectionSettingsScreen: View {
     private var orderedTabNames: [PocketTab] {
         let saved = storedTabOrder.split(separator: ",").compactMap { PocketTab(rawValue: String($0)) }
         if storedTabOrder.contains("vault") || !saved.contains(.modules) {
-            return [.home, .modules, .mirror, .manager, .settings]
+            // Migrate older saved orders without dropping the new Files destination.
+            return [.home, .modules, .mirror, .manager, .files, .settings]
         }
-        return saved + PocketTab.allCases.filter { !saved.contains($0) }
+        let completed = saved + PocketTab.allCases.filter { !saved.contains($0) }
+        return completed.filter { $0 != .settings } + [.settings]
     }
 
     private var connectionStatusSymbol: String {
@@ -1612,14 +1926,14 @@ private struct ConnectionSettingsScreen: View {
 
                     PocketCard {
                         VStack(alignment: .leading, spacing: 10) {
-                            Label("Sample & Set Vault", systemImage: "archivebox")
+                            Label("Files on Move", systemImage: "folder")
                                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                            Text("Import audio and project files, preview samples, and manage local backups.")
+                            Text("Browse and manage files stored on your Ableton Move through Schwung Manager.")
                                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
                             NavigationLink {
-                                BackupVaultScreen()
+                                FilesScreen(device: device)
                             } label: {
-                                Label("Open Vault", systemImage: "arrow.up.right.square")
+                                Label("Open Files", systemImage: "folder")
                                     .font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.background)
                                     .frame(maxWidth: .infinity).padding(.vertical, 12)
                                     .background(Theme.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -1628,10 +1942,110 @@ private struct ConnectionSettingsScreen: View {
                     }
 
                     PocketCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Full-screen mirror controls auto-hide", systemImage: "eye.slash")
+                                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                            Text("When the controls are hidden, show the eye button briefly after a touch or drag.")
+                                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                            Toggle("Hide the show-controls button automatically", isOn: $mirrorControlsAutoHideEnabled)
+                                .font(.system(size: 13, weight: .medium)).tint(Theme.accent)
+                            if mirrorControlsAutoHideEnabled {
+                                Picker("Hide after", selection: $mirrorControlsAutoHideSeconds) {
+                                    Text("1 second").tag(1)
+                                    Text("3 seconds").tag(3)
+                                    Text("5 seconds").tag(5)
+                                    Text("10 seconds").tag(10)
+                                    Text("15 seconds").tag(15)
+                                    Text("30 seconds").tag(30)
+                                }
+                                .tint(Theme.accent)
+                            }
+                        }
+                    }
+
+                    PocketCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("Bottom navigation auto-hide", systemImage: "rectangle.bottomthird.inset.filled")
+                                .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                            Text("Keep the screen clear while using Move controls. Tap anywhere to bring navigation back.")
+                                .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                            Toggle("Hide navigation automatically", isOn: $navigationAutoHideEnabled)
+                                .font(.system(size: 13, weight: .medium))
+                                .tint(Theme.accent)
+                            if navigationAutoHideEnabled {
+                                Text("Choose which pages hide the bottom bar after inactivity.")
+                                    .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                                ForEach(PocketTab.allCases) { tab in
+                                    Toggle(tab.title, isOn: Binding(
+                                        get: { Set(navigationAutoHideTabs.split(separator: ",").map(String.init)).contains(tab.rawValue) },
+                                        set: { enabled in
+                                            var selected = Set(navigationAutoHideTabs.split(separator: ",").map(String.init))
+                                            if enabled { selected.insert(tab.rawValue) }
+                                            else { selected.remove(tab.rawValue) }
+                                            navigationAutoHideTabs = PocketTab.allCases
+                                                .filter { selected.contains($0.rawValue) }
+                                                .map(\.rawValue)
+                                                .joined(separator: ",")
+                                        }
+                                    ))
+                                    .font(.system(size: 12, weight: .medium))
+                                    .tint(Theme.accent)
+                                }
+                                Picker("Hide after", selection: $navigationAutoHideSeconds) {
+                                    Text("1 second").tag(1)
+                                    Text("3 seconds").tag(3)
+                                    Text("5 seconds").tag(5)
+                                    Text("10 seconds").tag(10)
+                                    Text("15 seconds").tag(15)
+                                    Text("30 seconds").tag(30)
+                                    Text("60 seconds").tag(60)
+                                }
+                                .tint(Theme.accent)
+                            }
+                        }
+                    }
+
+                    PocketCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("SchwungTroller section order", systemImage: "arrow.up.arrow.down")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                            Text("Arrange the sections in the order that works best for your performance workflow. Changes are saved automatically.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.muted)
+                            ForEach(Array(orderedTrollerSections.enumerated()), id: \.element.id) { item in
+                                let index = item.offset
+                                let section = item.element
+                                HStack(spacing: 9) {
+                                    Image(systemName: "line.3.horizontal")
+                                        .foregroundStyle(Theme.accent)
+                                        .frame(width: 20)
+                                    Text(section.title)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(.white)
+                                    Spacer()
+                                    Button { moveTrollerSection(from: index, by: -1) } label: {
+                                        Image(systemName: "chevron.up")
+                                    }
+                                    .disabled(index == 0)
+                                    .opacity(index == 0 ? 0.3 : 1)
+                                    Button { moveTrollerSection(from: index, by: 1) } label: {
+                                        Image(systemName: "chevron.down")
+                                    }
+                                    .disabled(index == orderedTrollerSections.count - 1)
+                                    .opacity(index == orderedTrollerSections.count - 1 ? 0.3 : 1)
+                                }
+                                .font(.system(size: 13, weight: .medium))
+                                .padding(.vertical, 5)
+                            }
+                        }
+                    }
+
+                    PocketCard {
                         VStack(alignment: .leading, spacing: 10) {
                             Label("Bottom navigation order", systemImage: "arrow.left.arrow.right")
                                 .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
-                            Text("Move sections up or down. Vault is available inside Settings, not in the bottom navigation.")
+                            Text("Move sections up or down. Files opens the file browser on your connected Move.")
                                 .font(.system(size: 12)).foregroundStyle(Theme.muted)
                             ForEach(Array(orderedTabNames.enumerated()), id: \.element.id) { item in
                                 let index = item.offset
@@ -1641,9 +2055,9 @@ private struct ConnectionSettingsScreen: View {
                                     Text(tab.title).foregroundStyle(.white)
                                     Spacer()
                                     Button { moveTab(from: index, by: -1) } label: { Image(systemName: "chevron.up") }
-                                        .disabled(index == 0).opacity(index == 0 ? 0.3 : 1)
+                                        .disabled(index == 0 || tab == .settings).opacity(index == 0 || tab == .settings ? 0.3 : 1)
                                     Button { moveTab(from: index, by: 1) } label: { Image(systemName: "chevron.down") }
-                                        .disabled(index == orderedTabNames.count - 1).opacity(index == orderedTabNames.count - 1 ? 0.3 : 1)
+                                        .disabled(index == orderedTabNames.count - 1 || tab == .settings).opacity(index == orderedTabNames.count - 1 || tab == .settings ? 0.3 : 1)
                                 }
                                 .font(.system(size: 13, weight: .medium))
                                 .padding(.vertical, 4)
@@ -1738,7 +2152,7 @@ private struct ConnectionSettingsScreen: View {
     private func moveTab(from index: Int, by offset: Int) {
         var tabs = orderedTabNames
         let destination = index + offset
-        guard tabs.indices.contains(index), tabs.indices.contains(destination) else { return }
+        guard tabs.indices.contains(index), tabs.indices.contains(destination), tabs[index] != .settings else { return }
         let item = tabs.remove(at: index)
         tabs.insert(item, at: destination)
         storedTabOrder = tabs.map(\.rawValue).joined(separator: ",")

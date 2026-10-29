@@ -34,21 +34,18 @@ enum RemoteDestination: String, CaseIterable, Identifiable, Hashable {
 enum RemoteWireTarget: Equatable {
     /// Addressed through the `slot` field of the observed Remote UI messages.
     case slot(Int)
+    case masterFX
+    case tool
     /// No verified protocol exists in this codebase. No messages may be sent.
     case unverified(reason: String)
 }
 
 /// Single place that maps UI destinations to protocol addressing.
 ///
-/// UNVERIFIED DETAILS (isolated here on purpose):
-/// - Slots 1-4 use `slot == N`. This preserves v0.8.1 behaviour (the stepper label equalled the
-///   wire value, and the observed traffic for the user's "slot 2" carried `"slot":2`). Whether the
-///   Manager is 0-based internally has not been confirmed. Change `slotWireOffset` if testing shows
-///   Slot 1 is wire slot 0.
-/// - Master FX and Tool: the observed traffic only covers instrument slots. No evidence of how the
-///   Remote UI addresses them exists in the project, so nothing is sent for them.
+/// Verified against on-device tests: UI Slots 1-4 map to wire slot values 0-3.
+/// Master FX and Tool use dedicated message types implemented by Schwung Manager.
 enum RemoteProtocolAdapter {
-    static let slotWireOffset = 0
+    static let slotWireOffset = -1
 
     static func target(for destination: RemoteDestination) -> RemoteWireTarget {
         switch destination {
@@ -56,11 +53,45 @@ enum RemoteProtocolAdapter {
         case .slot2: return .slot(2 + slotWireOffset)
         case .slot3: return .slot(3 + slotWireOffset)
         case .slot4: return .slot(4 + slotWireOffset)
-        case .masterFX:
-            return .unverified(reason: "Master FX control over the Remote UI hasn't been verified yet, so Schwung Pocket sends nothing for it. Capture the Manager's WebSocket traffic for Master FX to enable it.")
-        case .tool:
-            return .unverified(reason: "Tool control over the Remote UI hasn't been verified yet, so Schwung Pocket sends nothing for it. Capture the Manager's WebSocket traffic for a Tool to enable it.")
+        case .masterFX: return .masterFX
+        case .tool: return .tool
         }
+    }
+}
+
+struct RemoteSlotModule: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let component_type: String
+    let device_only: Bool?
+    let dsp_path: String?
+    let installed: Bool?
+    let installed_version: String?
+    let subcategory: String?
+
+    var componentType: String { component_type }
+    var deviceOnly: Bool { device_only ?? false }
+
+    /// Human-readable Schwung catalog subcategory for the hot-swap browser.
+    var subcategoryTitle: String {
+        let value = (subcategory ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let labels: [String: String] = [
+            "polysynth": "Polysynth", "mono-bass": "Mono & Bass", "west-coast": "West Coast",
+            "fm": "FM", "wavetable": "Wavetable", "sampler-rompler": "Sampler & Rompler",
+            "drum-machine": "Drum Machine", "physical-modeling": "Physical Modeling",
+            "chiptune-retro": "Chiptune & Retro", "granular": "Granular", "macro-hybrid": "Macro & Hybrid",
+            "streaming-live-input": "Streaming & Live Input", "reverb": "Reverb", "delay-echo": "Delay & Echo",
+            "modulation": "Modulation", "distortion-saturation": "Distortion & Saturation", "dynamics": "Dynamics",
+            "filter-eq": "Filter & EQ", "granular-spectral": "Granular & Spectral",
+            "looper-sampler-fx": "Looper & Sampler FX", "multi-fx": "Multi-FX", "utility": "Utility",
+            "arpeggiator": "Arpeggiator", "sequencer": "Sequencer", "chord-harmony": "Chord & Harmony",
+            "routing-utility": "Routing & Utility", "sampling-editing": "Sampling & Editing",
+            "tuner-analysis": "Tuner & Analysis", "assistant": "Assistant", "performance": "Performance",
+            "controller": "Controller", "sampler-looper": "Sampler & Looper", "performance-fx": "Performance FX"
+        ]
+        if let label = labels[value] { return label }
+        guard !value.isEmpty else { return "Other / Uncategorised" }
+        return value.split(separator: "-").map { $0.capitalized }.joined(separator: " ")
     }
 }
 
@@ -104,6 +135,16 @@ struct RemoteParameter: Identifiable, Hashable {
             return options.isEmpty ? .readOnly(reason: "Choice parameter without options") : .choice
         case "init":
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
+        case "canvas":
+            // Explicit options provide a safe discrete control; canvas screens without options
+            // are module-rendered interfaces and cannot be represented by a generic parameter row.
+            return options.isEmpty
+                ? .readOnly(reason: "Schwung renders this as a module-specific canvas screen. Its editor is not exposed as standard parameter controls here, so no values are sent.")
+                : .choice
+        case "filepath":
+            return .readOnly(reason: "This parameter selects a file on the Move. The native app does not yet expose Schwung's Move-side file browser, so the path remains read-only rather than accepting an iPhone-local path.")
+        case "tool_read_only":
+            return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")
         default:
             return .readOnly(reason: "Unsupported control type “\(type)”.")
         }
@@ -149,7 +190,7 @@ struct RemoteParameter: Identifiable, Hashable {
         return RemoteParameter(
             component: component,
             key: key,
-            name: item["name"] as? String ?? key.replacingOccurrences(of: "_", with: " ").capitalized,
+            name: item["name"] as? String ?? item["label"] as? String ?? key.replacingOccurrences(of: "_", with: " ").capitalized,
             shortName: item["short_name"] as? String ?? "",
             type: type,
             minimum: number(item["min"]) ?? 0,

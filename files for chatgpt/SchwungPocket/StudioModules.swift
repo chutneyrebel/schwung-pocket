@@ -15,7 +15,7 @@ enum PocketStudioModule: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .nativeControls: return "Native Controls"
+        case .nativeControls: return "SchwungTroller"
         case .sampleLab: return "Sample Lab"
         case .grooveToolkit: return "Groove Toolkit"
         }
@@ -23,7 +23,7 @@ enum PocketStudioModule: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .nativeControls: return "Live knobs and switches for Schwung instruments"
+        case .nativeControls: return "Live controls for Schwung instruments"
         case .sampleLab: return "Import, audition and shelve audio on this iPhone"
         case .grooveToolkit: return "Sketch a pattern and export it as MIDI"
         }
@@ -117,9 +117,6 @@ struct SampleLabScreen: View {
         ModuleScreenShell(eyebrow: "SCHWUNG POCKET / MODULE", title: "Sample Lab",
                           subtitle: "Import audio from Files and audition it on this iPhone.") {
             SampleLabView()
-            Text("EXPERIMENTAL · Save your originals before testing workflows.")
-                .font(.system(size: 10, weight: .semibold)).tracking(0.8).foregroundStyle(Theme.muted)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }
@@ -129,9 +126,6 @@ struct GrooveToolkitScreen: View {
         ModuleScreenShell(eyebrow: "SCHWUNG POCKET / MODULE", title: "Groove Toolkit",
                           subtitle: "Sketch a drum pattern and export it as a MIDI file.") {
             GrooveToolkitView()
-            Text("EXPERIMENTAL · Save your originals before testing workflows.")
-                .font(.system(size: 10, weight: .semibold)).tracking(0.8).foregroundStyle(Theme.muted)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 }

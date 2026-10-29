@@ -2,6 +2,11 @@ name: Compile iOS app in cloud
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - v0.8.3-development
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -229,6 +234,38 @@ jobs:
           test -s "$IPA"
           echo "Created unsigned IPA package: $IPA"
           /usr/bin/stat -f 'IPA size: %z bytes' "$IPA"
+
+      - name: Generate per-build release notes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES="$GITHUB_WORKSPACE/RELEASE_NOTES.md"
+          if [[ ! -f "$NOTES" ]]; then
+            echo "ERROR: RELEASE_NOTES.md is missing from the development branch." >&2
+            exit 1
+          fi
+          OUT="$GITHUB_WORKSPACE/SchwungPocket-release-notes.md"
+          {
+            printf '# Schwung Pocket — Build Notes\n\n'
+            printf -- '- **Branch:** `%s`\n' "$GITHUB_REF_NAME"
+            printf -- '- **Commit:** `%s`\n' "$GITHUB_SHA"
+            printf -- '- **Workflow run:** `%s` (run ID `%s`)\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ID"
+            printf -- '- **Build timestamp (UTC):** `%s`\n' "$(date -u '+%Y-%m-%d %H:%M:%S')"
+            printf '%s\n' '- **Build result:** see the GitHub Actions run status; this document alone does not imply success.'
+            printf '\n---\n\n'
+            cat "$NOTES"
+          } > "$OUT"
+          echo "Generated cumulative release notes: $OUT"
+
+      - name: Upload release notes and regression checklist
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SchwungPocket-release-notes
+          path: SchwungPocket-release-notes.md
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload unsigned IPA artifact
         uses: actions/upload-artifact@v4

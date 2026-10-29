@@ -1,6 +1,25 @@
 import SwiftUI
 import UIKit
 import WebKit
+import Combine
+
+final class MirrorMIDIActivityStore: ObservableObject {
+    static let shared = MirrorMIDIActivityStore()
+
+    @Published private(set) var events: [String] = []
+
+    private init() {}
+
+    func record(_ event: [String: Any]) {
+        guard let label = event["label"] as? String,
+              let action = event["action"] as? String else { return }
+        let row = "\(label)  \(action)"
+        DispatchQueue.main.async {
+            if self.events.first != row { self.events.insert(row, at: 0) }
+            self.events = Array(self.events.prefix(5))
+        }
+    }
+}
 
 struct ManagerWebView: UIViewRepresentable {
     let url: URL
@@ -19,6 +38,31 @@ struct ManagerWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        let audioContextObserver = WKUserScript(
+            source: #"""
+            (() => {
+              const contexts = window.__spAudioContexts = window.__spAudioContexts || [];
+              for (const name of ['AudioContext', 'webkitAudioContext']) {
+                const Original = window[name];
+                if (!Original || Original.__spWrapped) continue;
+                function WrappedAudioContext(...args) {
+                  const context = new Original(...args);
+                  contexts.push(context);
+                  return context;
+                }
+                WrappedAudioContext.prototype = Original.prototype;
+                Object.setPrototypeOf(WrappedAudioContext, Original);
+                WrappedAudioContext.__spWrapped = true;
+                window[name] = WrappedAudioContext;
+              }
+            })();
+            """#,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        configuration.userContentController.addUserScript(audioContextObserver)
+        configuration.userContentController.add(context.coordinator, name: "schwungMIDIEvent")
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.backgroundColor = UIColor(red: 0.055, green: 0.067, blue: 0.09, alpha: 1.0)
         webView.isOpaque = false
@@ -65,7 +109,7 @@ struct ManagerWebView: UIViewRepresentable {
         webView.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 12))
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate, WKScriptMessageHandler {
         var mirrorDisplayMode: String?
         var fitMirrorViewport = false
         var onRecordControlResult: ((String) -> Void)?
@@ -75,8 +119,14 @@ struct ManagerWebView: UIViewRepresentable {
         var pendingRecordTrigger: UUID?
         var lastRecordTrigger: UUID?
 
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "schwungMIDIEvent", let event = message.body as? [String: Any] else { return }
+            MirrorMIDIActivityStore.shared.record(event)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             if mirrorDisplayMode != nil || fitMirrorViewport { applyMirrorOptions(to: webView) }
+            if webView.url?.path == "/mirror" { installMIDIEventBridge(to: webView) }
             if pendingAudioTrigger != nil {
                 pendingAudioTrigger = nil
                 enablePortalAudio(in: webView)
@@ -85,6 +135,119 @@ struct ManagerWebView: UIViewRepresentable {
                 pendingRecordTrigger = nil
                 triggerPortalRecording(in: webView)
             }
+        }
+
+        func installMIDIEventBridge(to webView: WKWebView) {
+            let script = #"""
+            (() => {
+              if (window.__spMIDIEventBridgeInstalled) return;
+              const log = document.getElementById('log');
+              const hero = document.getElementById('hero');
+              if (!log || !hero) return;
+
+              let lastEvent = '';
+              let lastCount = null;
+              let rawSurfaceAvailable = false;
+              const post = event => window.webkit.messageHandlers.schwungMIDIEvent.postMessage(event);
+
+              // Keep the native page's Log button and panel untouched. The shared
+              // event ring supplies live data without changing the user's UI state.
+              const pollSurfaceEvents = () => {
+                try {
+                  if (typeof surfView === 'undefined' || typeof OFF === 'undefined' ||
+                      typeof surf === 'undefined' || typeof N_EVENTS === 'undefined') return;
+                  rawSurfaceAvailable = true;
+                  const count = surfView.getUint32(OFF.evCount, true);
+                  if (lastCount === null) { lastCount = count; return; }
+                  if (count === lastCount) return;
+                  if (count < lastCount) { lastCount = count; return; }
+                  const first = Math.max(lastCount, count - N_EVENTS);
+                  for (let eventIndex = first; eventIndex < count; eventIndex++) {
+                    const offset = OFF.events + (eventIndex % N_EVENTS) * 8;
+                    const status = surf[offset + 4], data1 = surf[offset + 5], data2 = surf[offset + 6];
+                    const type = status & 0xF0;
+                    if (type === 0x90 || type === 0x80) {
+                      const noteOn = type === 0x90 && data2 > 0;
+                      const label = typeof noteName === 'function' ? noteName(data1) : ('Note ' + data1);
+                      post({ kind: 'note', label, action: noteOn ? ('velocity ' + data2) : 'note off', note: data1, velocity: data2, pressed: noteOn });
+                    } else if (type === 0xB0) {
+                      const label = (typeof CC_NAMES !== 'undefined' && CC_NAMES[data1]) ? CC_NAMES[data1] : ('CC ' + data1);
+                      post({ kind: 'cc', label, action: 'value ' + data2, controller: data1, value: data2 });
+                    }
+                  }
+                  lastCount = count;
+                } catch (_) {}
+              };
+
+              // Fallback only reads the Log if the user has enabled it themselves.
+              const publishLatestLogRow = () => {
+                if (rawSurfaceAvailable || log.classList.contains('hidden')) return;
+                const row = log.querySelector('.row');
+                if (!row) return;
+                const cells = [...row.querySelectorAll('span')];
+                if (cells.length < 2) return;
+                const label = (cells[0].textContent || '').trim();
+                const action = (cells[1].textContent || '').trim();
+                const age = (cells[2]?.textContent || '').trim();
+                if (!label || !action) return;
+                const key = label + '|' + action;
+                if (key === lastEvent) return;
+                lastEvent = key;
+                post({ kind: 'log', label, action, age });
+              };
+              new MutationObserver(publishLatestLogRow).observe(log, { childList: true, subtree: true, characterData: true });
+
+              // Native Schwung Mirror fullscreen hides all page siblings except #hero.
+              // This small overlay restores access to the existing audio and recording
+              // buttons without changing the mirror's own tap-to-fullscreen gesture.
+              const controls = document.createElement('div');
+              controls.id = 'sp-mirror-fullscreen-controls';
+              controls.innerHTML = '<button type="button" data-action="audio">Audio</button><button type="button" data-action="record">Record</button>';
+              const style = document.createElement('style');
+              style.textContent = `
+                body.sp-fs { padding:0 !important; justify-content:center !important; }
+                body.sp-fs > :not(#hero):not(#sp-mirror-fullscreen-controls) { display:none !important; }
+                body.sp-fs #hero { border:none !important; max-width:none !important; width:min(100vw, 200dvh) !important; cursor:zoom-out; }
+                body.sp-fs > #sp-mirror-fullscreen-controls { display:flex !important; }
+                #sp-mirror-fullscreen-controls { display:none; position:fixed; z-index:2147483647; top:max(8px, env(safe-area-inset-top)); right:max(8px, env(safe-area-inset-right)); gap:6px; padding:5px; border-radius:12px; background:rgba(12,16,24,.92); border:1px solid rgba(255,255,255,.2); }
+                #sp-mirror-fullscreen-controls button { border:0; border-radius:8px; padding:9px 12px; color:#fff; background:#30394a; font:600 13px -apple-system,BlinkMacSystemFont,sans-serif; }
+                #sp-mirror-fullscreen-controls button[data-action="record"] { background:#8d2632; }
+              `;
+              document.head.appendChild(style);
+              document.body.appendChild(controls);
+              // Use a companion-owned fullscreen class instead of Schwung's native
+              // body.fs mode. The native rule hides every sibling except #hero and
+              // conflicts with the app's injected layout rules on some WebKit builds.
+              if (hero && !window.__spMirrorFullscreenTapInstalled) {
+                window.__spMirrorFullscreenTapInstalled = true;
+                hero.addEventListener('click', event => {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                  document.body.classList.toggle('sp-fs');
+                }, true);
+              }
+              const audioButton = controls.querySelector('[data-action="audio"]');
+              const recordButton = controls.querySelector('[data-action="record"]');
+              const muteButton = document.getElementById('mute');
+              const recButton = document.getElementById('rec');
+              const setLabelIfChanged = (button, label) => {
+                if (button && button.textContent !== label) button.textContent = label;
+              };
+              const refreshControlLabels = () => {
+                if (muteButton) setLabelIfChanged(audioButton, /unmute/i.test(muteButton.textContent || '') ? 'Enable audio' : 'Mute audio');
+                if (recButton) setLabelIfChanged(recordButton, /stop/i.test(recButton.textContent || '') ? 'Stop recording' : 'Record');
+              };
+              audioButton.addEventListener('click', event => { event.stopPropagation(); if (muteButton) muteButton.click(); refreshControlLabels(); });
+              recordButton.addEventListener('click', event => { event.stopPropagation(); if (recButton) recButton.click(); setTimeout(refreshControlLabels, 80); });
+              new MutationObserver(refreshControlLabels).observe(document.body, { childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['class','disabled'] });
+              refreshControlLabels();
+
+              window.__spMIDIEventBridgeInstalled = true;
+              pollSurfaceEvents();
+              window.__spMIDIEventPoll = setInterval(pollSurfaceEvents, 80);
+            })();
+            """#
+            webView.evaluateJavaScript(script, completionHandler: nil)
         }
 
         func applyMirrorOptions(to webView: WKWebView) {
@@ -96,6 +259,41 @@ struct ManagerWebView: UIViewRepresentable {
               const mode = '__MODE__';
               const fit = __FIT__;
               const styleId = 'schwung-pocket-mirror-overrides';
+              if (!window.__spMirrorChromeObserver) {
+                const scheduleMirrorRefresh = () => {
+                  if (window.__spMirrorChromeTimer) clearTimeout(window.__spMirrorChromeTimer);
+                  window.__spMirrorChromeTimer = setTimeout(() => {
+                    try {
+                      window.__spApplyMirrorLayout && window.__spApplyMirrorLayout();
+                      window.__spHideMirrorPortalChrome && window.__spHideMirrorPortalChrome();
+                    } catch (_) {}
+                  }, 120);
+                };
+                // Schwung Manager's fullscreen toggle can change classes/visibility
+                // without inserting DOM nodes. Watch those state changes, but not
+                // style attributes, which this script itself modifies.
+                window.__spMirrorChromeObserver = new MutationObserver((records) => {
+                  // The /mirror page owns its body.fs class and canvas visibility.
+                  // Re-applying the generic layout during that toggle can reorder
+                  // zero-sized roots and leave the canvas black after the second tap.
+                  const relevant = records.filter(record => !(
+                    location.pathname === '/mirror' &&
+                    record.target === document.body &&
+                    record.attributeName === 'class'
+                  ));
+                  if (relevant.some(record => record.type === 'childList' ||
+                      ['class', 'hidden', 'aria-expanded', 'data-state'].includes(record.attributeName))) {
+                    scheduleMirrorRefresh();
+                  }
+                });
+                window.__spMirrorChromeObserver.observe(document.documentElement, {
+                  childList: true, subtree: true, attributes: true,
+                  attributeFilter: ['class', 'hidden', 'aria-expanded', 'data-state']
+                });
+                window.addEventListener('fullscreenchange', scheduleMirrorRefresh, true);
+                window.addEventListener('resize', scheduleMirrorRefresh, true);
+                window.addEventListener('orientationchange', scheduleMirrorRefresh, true);
+              }
               let style = document.getElementById(styleId);
               if (!style) { style = document.createElement('style'); style.id = styleId; document.head.appendChild(style); }
               style.textContent = `
@@ -103,6 +301,7 @@ struct ManagerWebView: UIViewRepresentable {
                 body { box-sizing:border-box !important; }
                 ${fit ? 'overflow-x:hidden !important;' : ''}
                 canvas, img, video, svg { max-width:100% !important; max-height:100dvh !important; object-fit:contain !important; }
+                @media (orientation: landscape) { body { padding:0 !important; } header, nav { max-height:0 !important; overflow:hidden !important; } }
               `;
               if (fit) {
                 let viewport = document.querySelector('meta[name="viewport"]');
@@ -114,7 +313,7 @@ struct ManagerWebView: UIViewRepresentable {
               // Cache candidates before hiding anything. Hidden elements remain in this list so modes can always be switched back.
               if (!window.__spMirrorRoots || !window.__spMirrorRoots.some(el => el && el.isConnected)) {
                 const all = [...document.querySelectorAll(selector)].filter(visible);
-                window.__spMirrorRoots = all.filter(el => !all.some(other => other !== el && el.contains(other)));
+                window.__spMirrorRoots = all.filter(el => !all.some(other => other !== el && other.contains(el)));
                 window.__spMirrorRoots.sort((a,b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
                 window.__spMirrorRoots.forEach((el, i) => { if (!el.dataset.spOriginalDisplay) el.dataset.spOriginalDisplay = el.style.display || '__default__'; el.dataset.spMirrorIndex = String(i); });
               }
@@ -133,6 +332,33 @@ struct ManagerWebView: UIViewRepresentable {
                   delete el.dataset.spMirrorChromeDisplay;
                 }
               }
+              // Also hide standalone status labels nested inside layout wrappers that
+              // contain the display. Do not hide any element that wraps a mirror root.
+              for (const el of document.querySelectorAll('body *')) {
+                if (roots.some(root => el === root || el.contains(root))) continue;
+                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!text || text.length > 110 || !/move\s*(is\s*)?(reachable|connected|offline)|connection\s*status|connected\s*to\s*move/i.test(text)) continue;
+                if (el.querySelector('canvas, img, video, svg')) continue;
+                if (!el.dataset.spMirrorStatusDisplay) el.dataset.spMirrorStatusDisplay = el.style.display || '__default__';
+                el.style.display = 'none';
+              }
+              // Remove the portal's duplicate status/capture toolbar; native controls are above.
+              window.__spHideMirrorPortalChrome = () => {
+              for (const el of document.querySelectorAll('body *')) {
+                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text.length > 520 || !/(screen\s*\+\s*device|screen|device)/i.test(text) || !/save png/i.test(text) || !/log/i.test(text) || !/record/i.test(text)) continue;
+                let candidate = el;
+                for (let depth = 0; depth < 4 && candidate.parentElement; depth++) {
+                  const parent = candidate.parentElement;
+                  const parentText = (parent.innerText || parent.textContent || '').replace(/\s+/g, ' ').trim();
+                  if (parentText.length > 620) break;
+                  candidate = parent;
+                }
+                if (!candidate.dataset.spMirrorCaptureToolbar) candidate.dataset.spMirrorCaptureToolbar = candidate.style.display || '__default__';
+                candidate.style.display = 'none';
+              }
+              };
+              window.__spHideMirrorPortalChrome();
               roots.forEach((el, i) => {
                 const original = el.dataset.spOriginalDisplay || '__default__';
                 const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === roots.length - 1);
@@ -146,14 +372,35 @@ struct ManagerWebView: UIViewRepresentable {
               document.documentElement.style.width = '100%'; document.body.style.width = '100%';
               window.__spApplyMirrorLayout = () => {
                 const current = (window.__spMirrorRoots || []).filter(el => el && el.isConnected);
+                // Restore original visibility before measuring. Otherwise a previously hidden
+                // top/bottom panel has a zero-sized rectangle and rotation cannot re-order panels.
+                current.forEach(el => {
+                  const original = el.dataset.spOriginalDisplay || '__default__';
+                  el.style.display = original === '__default__' ? '' : original;
+                  el.style.width = ''; el.style.height = '';
+                });
+                current.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+                window.__spMirrorRoots = current;
                 current.forEach((el, i) => {
                   const original = el.dataset.spOriginalDisplay || '__default__';
-                  const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === current.length - 1);
+                  const show = mode === 'both' || (mode === 'top' && i === 0) || (mode === 'bottom' && i === current.length - 1) || (mode.startsWith('slot') && i === Number(mode.slice(4)) - 1);
                   el.style.display = show ? (original === '__default__' ? '' : original) : 'none';
-                  el.style.width = ''; el.style.height = '';
-                  if (show && fit) { el.style.maxWidth = '100vw'; el.style.maxHeight = '100dvh'; el.style.boxSizing = 'border-box'; if (mode !== 'both') { el.style.width = '100vw'; el.style.height = '100dvh'; el.style.objectFit = 'contain'; } }
+                  if (show && fit) {
+                    el.style.maxWidth = '100vw';
+                    el.style.maxHeight = '100vh';
+                    el.style.maxHeight = '100dvh';
+                    el.style.boxSizing = 'border-box';
+                    if (mode !== 'both') {
+                      el.style.width = '100vw';
+                      el.style.height = '100vh';
+                      el.style.height = '100dvh';
+                      el.style.objectFit = 'contain';
+                    }
+                  }
                 });
-                document.documentElement.style.width = '100%'; document.body.style.width = '100%'; window.scrollTo(0,0);
+                document.documentElement.style.width = '100%';
+                document.body.style.width = '100%';
+                window.scrollTo(0,0);
               };
               if (!window.__spResizeHandlerInstalled) {
                 window.__spResizeHandlerInstalled = true;
@@ -172,22 +419,52 @@ struct ManagerWebView: UIViewRepresentable {
         func enablePortalAudio(in webView: WKWebView) {
             let script = #"""
             (() => {
+              // Schwung Mirror has a stable audio toggle. It remains usable even
+              // while the page's native fullscreen mode hides the toolbar.
+              const portalMute = document.getElementById('mute');
+              if (portalMute) {
+                const before = (portalMute.textContent || '').trim();
+                portalMute.click();
+                return /unmute/i.test(before) ? 'enabled' : /mute/i.test(before) ? 'muted' : 'toggled';
+              }
               const visible = el => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0; };
-              const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+              const label = el => [el.innerText, el.textContent, el.getAttribute('aria-label'), el.getAttribute('title'), el.getAttribute('data-testid'), el.getAttribute('data-tooltip-content'), el.getAttribute('data-state'), el.value, el.querySelector('svg')?.innerHTML].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
               const controls = [...document.querySelectorAll('button,[role="button"],a,[onclick],input[type="button"],label')].filter(visible);
-              const unmute = controls.find(el => /unmute|enable\s*(sound|audio)|sound\s*on|audio\s*on/i.test(label(el)));
-              if (unmute) unmute.click();
+              const toggle = controls.find(el => /\b(unmute|mute|audio|sound)\b/i.test(label(el)) && !/volume\s*(up|down)|increase\s*volume|decrease\s*volume/i.test(label(el)));
+              let controlResult = 'toggled';
+              if (toggle) {
+                const text = label(toggle);
+                toggle.click();
+                controlResult = /\bunmute\b|enable\s*(sound|audio)/i.test(text) ? 'enabled' : /\bmute\b/i.test(text) ? 'muted' : 'toggled';
+              }
               let mediaCount = 0;
-              document.querySelectorAll('audio,video').forEach(media => { media.muted = false; media.volume = 1; mediaCount++; const p = media.play(); if (p && p.catch) p.catch(() => {}); });
-              const audioContext = window.AudioContext || window.webkitAudioContext;
-              if (audioContext && window.__spAudioContext && window.__spAudioContext.state === 'suspended') window.__spAudioContext.resume().catch(() => {});
-              return (unmute || mediaCount > 0) ? 'enabled' : 'not-found';
+              document.querySelectorAll('audio,video').forEach(media => {
+                media.muted = false;
+                media.volume = 1;
+                mediaCount++;
+                const p = media.play();
+                if (p && p.catch) p.catch(() => {});
+              });
+              const contexts = window.__spAudioContexts || [];
+              let resumedContexts = 0;
+              contexts.forEach(context => {
+                if (context && context.state !== 'closed') {
+                  if (context.state === 'suspended') context.resume().catch(() => {});
+                  if (context.state === 'running' || context.state === 'suspended') resumedContexts++;
+                }
+              });
+              if (!toggle && mediaCount === 0 && resumedContexts === 0) return 'not-found';
+              return controlResult;
             })();
             """#
             webView.evaluateJavaScript(script) { [weak self] result, error in
                 DispatchQueue.main.async {
-                    if let error { NSLog("Schwung Pocket could not enable portal audio: %@", error.localizedDescription); self?.onAudioControlResult?("not-found") }
-                    else { self?.onAudioControlResult?((result as? String) ?? "not-found") }
+                    if let error {
+                        NSLog("Schwung Pocket could not toggle portal audio: %@", error.localizedDescription)
+                        self?.onAudioControlResult?("not-found")
+                    } else {
+                        self?.onAudioControlResult?((result as? String) ?? "not-found")
+                    }
                 }
             }
         }
@@ -195,6 +472,14 @@ struct ManagerWebView: UIViewRepresentable {
         func triggerPortalRecording(in webView: WKWebView) {
             let script = #"""
             (() => {
+              // The Mirror page's own Record/Stop button works in and out of
+              // fullscreen; don't require it to be visible to the DOM hit-test.
+              const portalRecord = document.getElementById('rec');
+              if (portalRecord) {
+                const before = (portalRecord.textContent || '').trim();
+                portalRecord.click();
+                return /stop/i.test(before) ? 'stopped' : /record/i.test(before) ? 'started' : 'toggled';
+              }
               const visible = el => {
                 const s = getComputedStyle(el), r = el.getBoundingClientRect();
                 return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity || 1) > 0 && r.width > 0 && r.height > 0;
