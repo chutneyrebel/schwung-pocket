@@ -89,7 +89,6 @@ struct NativeControlsScreen: View {
                     connectionCard
                 }
 
-                performanceStatusStrip
                 destinationCard
 
                 ForEach(orderedSections.filter { $0 != .mixer && $0 != .connection }) { section in
@@ -187,57 +186,6 @@ struct NativeControlsScreen: View {
         } message: {
             Text("This unloads the effect from that Master FX chain position.")
         }
-    }
-
-    private var performanceStatusStrip: some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
-                .shadow(color: statusColor.opacity(remote.isConnected ? 0.35 : 0), radius: 5)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(remote.statusText.uppercased())
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(0.8)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(remote.isConnected ? "Move control link" : "Check your Move connection below")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            if !midiActivity.events.isEmpty {
-                HStack(spacing: 5) {
-                    Circle().fill(Theme.success).frame(width: 6, height: 6)
-                    Text("MIDI")
-                        .font(.system(size: 9, weight: .heavy))
-                        .tracking(0.7)
-                        .foregroundStyle(Theme.success)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(Theme.success.opacity(0.10), in: Capsule())
-                .transition(.scale.combined(with: .opacity))
-            }
-            Text(remote.destination.title.uppercased())
-                .font(.system(size: 9, weight: .heavy))
-                .tracking(0.6)
-                .foregroundStyle(Theme.accent)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(Theme.accent.opacity(0.10), in: Capsule())
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.05), lineWidth: 1)
-        }
-        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: remote.destination)
-        .animation(.easeOut(duration: 0.18), value: midiActivity.events.isEmpty)
     }
 
     private func sectionSummary(_ section: TrollerSection) -> String {

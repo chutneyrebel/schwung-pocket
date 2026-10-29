@@ -234,3 +234,8 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 - **Still deferred:** new Master FX Clear, Tool Clear and transport controls. Build success will not count as physical Move runtime verification until tested on device.
 
 The build workflow appends the current commit, branch, run number and build timestamp to this document when uploading the `SchwungPocket-release-notes` artifact. The cumulative history above remains in source control; update it whenever a feature, fix, limitation or test result changes.
+
+### v0.9 follow-up · Remove duplicate connection status
+- Removed the redundant performance status strip that repeated connection state already shown in the Connection & MIDI Activity card.
+- Kept the primary Connection & MIDI Activity section at the top; the performance mixer follows it directly, avoiding two separate connected/status panels.
+- **Testing note:** confirm the page shows one connection section only and that Connect/Disconnect, Reload, MIDI activity and destination selection remain available.
