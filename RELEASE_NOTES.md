@@ -218,6 +218,12 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 
 ## Per-build notes
 
+### v0.9 follow-up · Breakbeat parameters and screen layout
+- Breakbeat `filepath` metadata now explains that the A Sample WAV picker is Move-side and is not editable in the native parameter panel yet; it is no longer described as a generic unsupported file path.
+- Breakbeat `canvas` metadata now identifies the Status item as a module-authored `status_view.js` screen and explicitly clarifies that the message is informational, not a connection error. No guessed writes are sent.
+- Removed the large SchwungTroller hero header and subtitle from the Performance screen. Connection & MIDI Activity now appears first, followed by performance status and the mixer.
+- **Testing note:** a native Breakbeat sample picker and rendering of the custom canvas UI are still separate feature work; this change improves handling and explanation rather than claiming those controls are implemented.
+
 ### v0.9 carry-forward · reliability and module discovery
 - **Active branch:** `v0.9-development`. Selected fixes from the completed v0.8.3 pass are carried forward while preserving the v0.9 SchwungTroller redesign and accessibility refinements.
 - **Previously user-verified:** page/tab switching no longer incurs the old multi-second delay (Build #312, commit `f0ffa12475683cfbc866e879f998e568eb1821bd`). The v0.9 persistent SchwungTroller/navigation work remains intact.

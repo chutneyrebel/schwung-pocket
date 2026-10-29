@@ -68,17 +68,31 @@ struct NativeControlsScreen: View {
     @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = "connection,signalChain,parameters,slotSettings"
 
     var body: some View {
-        ModuleScreenShell(
-            eyebrow: "SCHWUNG POCKET / LIVE INSTRUMENT",
-            title: "SchwungTroller",
-            subtitle: "Four-slot performance control with a focused signal chain and live parameters."
-        ) {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                performanceStatusStrip
+                // Connection is the first thing on this screen; omit the redundant SchwungTroller hero header.
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: 8) {
+                        Image(systemName: TrollerSection.connection.symbol)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                        Text(TrollerSection.connection.title.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.muted)
+                        Spacer()
+                        Text(sectionSummary(.connection))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(1)
+                    }
+                    connectionCard
+                }
 
+                performanceStatusStrip
                 destinationCard
 
-                ForEach(orderedSections.filter { $0 != .mixer }) { section in
+                ForEach(orderedSections.filter { $0 != .mixer && $0 != .connection }) { section in
                     if shouldShow(section) {
                         DisclosureGroup(
                             isExpanded: Binding(
@@ -118,7 +132,13 @@ struct NativeControlsScreen: View {
                     }
                 }
             }
+            .padding(18)
         }
+        .background(Theme.background.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.background, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .onAppear {
             remote.loadSlotModules(address: device.addressText)
             // The screen stays mounted after its first visit, so this is normally a no-op.

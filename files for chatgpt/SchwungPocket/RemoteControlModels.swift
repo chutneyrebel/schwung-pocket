@@ -136,13 +136,13 @@ struct RemoteParameter: Identifiable, Hashable {
         case "init":
             return .readOnly(reason: "Initialization-type parameter. Its meaning on the device isn't confirmed, so it is shown read-only and nothing is sent for it.")
         case "canvas":
-            // Explicit options provide a safe discrete control; canvas screens without options
-            // are module-rendered interfaces and cannot be represented by a generic parameter row.
+            // Canvas metadata points to a module-authored UI script, not a normal scalar control.
+            // Keep it visible for context but never send guessed values from the native parameter editor.
             return options.isEmpty
-                ? .readOnly(reason: "Schwung renders this as a module-specific canvas screen. Its editor is not exposed as standard parameter controls here, so no values are sent.")
+                ? .readOnly(reason: "Custom Schwung status screen. This module draws its own interface (`status_view.js`); the native parameter panel cannot render that script yet. This is informational, not a connection error.")
                 : .choice
         case "filepath":
-            return .readOnly(reason: "This parameter selects a file on the Move. The native app does not yet expose Schwung's Move-side file browser, so the path remains read-only rather than accepting an iPhone-local path.")
+            return .readOnly(reason: "Move-side sample picker required. This parameter points to a WAV file in the Breakbeat samples folder on the Move. The native app does not yet expose that picker, so it cannot safely change the sample here.")
         case "tool_read_only":
             return .readOnly(reason: "Schwung reports this Tool state value, but the standard Tool protocol does not provide editable control metadata. This value is read-only; no changes will be sent.")
         default:
