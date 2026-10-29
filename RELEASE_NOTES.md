@@ -218,4 +218,13 @@ Record **Pass / Fail / Not tested**, the device/Move setup, and notes for each i
 
 ## Per-build notes
 
+### v0.9 carry-forward · reliability and module discovery
+- **Active branch:** `v0.9-development`. Selected fixes from the completed v0.8.3 pass are carried forward while preserving the v0.9 SchwungTroller redesign and accessibility refinements.
+- **Previously user-verified:** page/tab switching no longer incurs the old multi-second delay (Build #312, commit `f0ffa12475683cfbc866e879f998e568eb1821bd`). The v0.9 persistent SchwungTroller/navigation work remains intact.
+- Hot-swap picker groups installed compatible modules by Schwung catalogue subcategory and sorts categories then module names.
+- Catalogue subcategories survive merging catalogue and installed-module endpoint data.
+- Parameter metadata uses Schwung's `label` when `name` is absent, without guessing parameter control types.
+- Canvas controls without explicit options and Move-side filepath parameters remain read-only with clearer explanations; explicit canvas options remain choice controls.
+- **Still deferred:** new Master FX Clear, Tool Clear and transport controls. Build success will not count as physical Move runtime verification until tested on device.
+
 The build workflow appends the current commit, branch, run number and build timestamp to this document when uploading the `SchwungPocket-release-notes` artifact. The cumulative history above remains in source control; update it whenever a feature, fix, limitation or test result changes.

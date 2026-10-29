@@ -1365,6 +1365,12 @@ private struct VerticalVolumeSlider: View {
 }
 
 
+private struct ModuleSwapGroup: Identifiable {
+    let title: String
+    let modules: [RemoteSlotModule]
+    var id: String { title }
+}
+
 private struct ModuleSwapSheet: View {
     @ObservedObject var remote: RemoteControlStore
     let address: String
@@ -1393,7 +1399,20 @@ private struct ModuleSwapSheet: View {
                     || $0.name.localizedCaseInsensitiveContains(searchText)
                     || $0.id.localizedCaseInsensitiveContains(searchText)
             }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                let categoryOrder = $0.subcategoryTitle.localizedCaseInsensitiveCompare($1.subcategoryTitle)
+                if categoryOrder != .orderedSame { return categoryOrder == .orderedAscending }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
+
+    private var groupedChoices: [ModuleSwapGroup] {
+        let grouped = Dictionary(grouping: choices, by: \.subcategoryTitle)
+        return grouped.keys.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            .compactMap { title in
+                guard let modules = grouped[title], !modules.isEmpty else { return nil }
+                return ModuleSwapGroup(title: title, modules: modules)
+            }
     }
 
     var body: some View {
@@ -1413,8 +1432,8 @@ private struct ModuleSwapSheet: View {
                         Button("Retry module discovery") { remote.loadSlotModules(address: address) }
                     }
                 }
-                Section {
-                    if choices.isEmpty {
+                if choices.isEmpty {
+                    Section("Installed \(displayTitle)") {
                         Text(searchText.isEmpty
                              ? "No compatible modules found. Check that Schwung supports /api/slot-modules and try again."
                              : "No modules match “\(searchText)”. Try another name or module ID.")
@@ -1422,45 +1441,42 @@ private struct ModuleSwapSheet: View {
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 4)
                     }
-                    ForEach(choices) { module in
-                        Button {
-                            pendingModule = module
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: module.id == pendingModule?.id ? "checkmark.circle.fill" : "waveform")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(module.id == pendingModule?.id ? Color.accentColor : .secondary)
-                                    .frame(width: 28, height: 28)
-                                    .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(module.name)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                    Text(module.id)
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
+                } else {
+                    ForEach(groupedChoices) { group in
+                        Section("\(displayTitle) · \(group.title)") {
+                            ForEach(group.modules) { module in
+                                Button {
+                                    pendingModule = module
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: module.id == pendingModule?.id ? "checkmark.circle.fill" : "waveform")
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .foregroundStyle(module.id == pendingModule?.id ? Color.accentColor : .secondary)
+                                            .frame(width: 28, height: 28)
+                                            .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(module.name)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(.primary)
+                                            Text(module.id)
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer(minLength: 4)
+                                        if module.id == pendingModule?.id {
+                                            Text("SELECTED")
+                                                .font(.system(size: 8, weight: .heavy))
+                                                .tracking(0.6)
+                                                .foregroundStyle(Color.accentColor)
+                                        }
+                                    }
+                                    .padding(.vertical, 3)
+                                    .contentShape(Rectangle())
                                 }
-                                Spacer(minLength: 4)
-                                if module.id == pendingModule?.id {
-                                    Text("SELECTED")
-                                        .font(.system(size: 8, weight: .heavy))
-                                        .tracking(0.6)
-                                        .foregroundStyle(Color.accentColor)
-                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(.vertical, 3)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                    }
-                } header: {
-                    HStack {
-                        Text("Installed \(displayTitle)")
-                        Spacer()
-                        Text("\(choices.count)")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
