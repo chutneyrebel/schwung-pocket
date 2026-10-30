@@ -59,6 +59,24 @@ enum RemoteProtocolAdapter {
     }
 }
 
+/// What Schwung can positively report about a Move slot's Schwung chain.
+/// This does not identify Ableton stock devices when no Schwung module is present.
+enum RemoteSlotModuleStatus: Equatable {
+    case checking
+    case schwung
+    case none
+    case unknown
+
+    var label: String {
+        switch self {
+        case .checking: return "CHECKING"
+        case .schwung: return "SCHWUNG MODULE"
+        case .none: return "NO SCHWUNG MODULE"
+        case .unknown: return "STATUS UNKNOWN"
+        }
+    }
+}
+
 struct RemoteSlotModule: Codable, Identifiable, Hashable {
     let id: String
     let name: String

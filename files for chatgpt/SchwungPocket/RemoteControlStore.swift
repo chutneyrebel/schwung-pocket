@@ -48,6 +48,7 @@ final class RemoteControlStore: ObservableObject {
     @Published private(set) var customComponentUIURLs: [String: String] = [:]
     @Published private(set) var slotMixStates: [Int: RemoteSlotMixState] = [:]
     @Published private(set) var slotInstrumentNames: [Int: String] = [:]
+    @Published private(set) var slotModuleStatuses: [Int: RemoteSlotModuleStatus] = [:]
     @Published private(set) var availableSlotModules: [RemoteSlotModule] = []
     @Published private(set) var isLoadingSlotModules = false
     @Published private(set) var slotModulesError: String?
@@ -1104,6 +1105,7 @@ final class RemoteControlStore: ObservableObject {
                 let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
                 slotInstrumentNames[slot] = cleaned.isEmpty ? nil : cleaned
             }
+            slotModuleStatuses[slot] = Self.slotModuleStatus(from: message)
         }
         if type == "param_update",
            let slot = message["slot"] as? Int,
@@ -1293,6 +1295,54 @@ final class RemoteControlStore: ObservableObject {
         for (key, value) in merged { lastSent[key] = value }
         loadState = .loaded
         loadTimeoutTask?.cancel()
+    }
+
+    private static func slotModuleStatus(from message: [String: Any]) -> RemoteSlotModuleStatus {
+        let unknown = Set(message["unknown"] as? [String] ?? [])
+        let sectionNames = ["synth", "midi_fx", "fx"]
+        guard sectionNames.contains(where: { !unknown.contains($0) }) else {
+            return .unknown
+        }
+
+        var foundModule = false
+        var allSectionsKnown = true
+
+        func hasName(_ value: Any?) -> Bool {
+            guard let raw = value as? String else { return false }
+            return !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        if unknown.contains("synth") {
+            allSectionsKnown = false
+        } else if hasName(message["synth"]) {
+            foundModule = true
+        }
+
+        if unknown.contains("midi_fx") {
+            allSectionsKnown = false
+        } else if let modules = message["midi_fx"] as? [String] {
+            foundModule = foundModule || modules.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        } else if message["midi_fx1"] != nil {
+            foundModule = foundModule || hasName(message["midi_fx1"])
+        } else {
+            allSectionsKnown = false
+        }
+
+        if unknown.contains("fx") {
+            allSectionsKnown = false
+        } else if let modules = message["fx"] as? [String] {
+            foundModule = foundModule || modules.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        } else {
+            let hasLegacyFX = message["fx1"] != nil || message["fx2"] != nil
+            if hasLegacyFX {
+                foundModule = foundModule || hasName(message["fx1"]) || hasName(message["fx2"])
+            } else {
+                allSectionsKnown = false
+            }
+        }
+
+        if foundModule { return .schwung }
+        return allSectionsKnown ? .none : .unknown
     }
 
     private func handleSlotInfo(_ message: [String: Any]) {

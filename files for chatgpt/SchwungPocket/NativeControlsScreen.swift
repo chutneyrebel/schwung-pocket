@@ -352,6 +352,7 @@ struct NativeControlsScreen: View {
                     selection: remote.destination,
                     isConnected: remote.isConnected,
                     slotInstrumentNames: remote.slotInstrumentNames,
+                    slotModuleStatus: { remote.slotModuleStatuses[$0] ?? (remote.isConnected ? .checking : .unknown) },
                     slotVolume: remote.slotVolume(for:),
                     isMuted: remote.isSlotMuted,
                     isSoloed: remote.isSlotSoloed,
@@ -1167,6 +1168,7 @@ struct DestinationSelector: View {
     let selection: RemoteDestination
     let isConnected: Bool
     let slotInstrumentNames: [Int: String]
+    let slotModuleStatus: (Int) -> RemoteSlotModuleStatus
     let slotVolume: (Int) -> Double
     let isMuted: (Int) -> Bool
     let isSoloed: (Int) -> Bool
@@ -1204,6 +1206,18 @@ struct DestinationSelector: View {
                                     .font(.system(size: 9, weight: .semibold))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.65)
+                                Text(slotModuleStatus(slot).label)
+                                    .font(.system(size: 7, weight: .heavy, design: .rounded))
+                                    .tracking(0.35)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
+                                    .foregroundStyle({
+                                        switch slotModuleStatus(slot) {
+                                        case .schwung: return Theme.success
+                                        case .none: return Theme.muted
+                                        case .checking, .unknown: return Theme.warning
+                                        }
+                                    }())
                             }
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity, minHeight: 34)
