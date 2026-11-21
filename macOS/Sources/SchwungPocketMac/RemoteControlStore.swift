@@ -203,8 +203,7 @@ final class RemoteControlStore: ObservableObject {
         tearDownSocket()
         connection = .disconnected
         if loadState == .loading || loadState == .loaded { loadState = .idle }
-        clearMixerState()
-        clearPresentedData()
+        clearLiveConnectionState()
     }
 
     func appDidEnterBackground() {
@@ -223,6 +222,7 @@ final class RemoteControlStore: ObservableObject {
 
     private func openSocket(isRetry: Bool) {
         tearDownSocket()
+        clearLiveConnectionState()
         guard let url = Self.websocketURL(address: address) else {
             connection = .failed("Invalid Move address")
             wantsConnection = false
@@ -311,7 +311,7 @@ final class RemoteControlStore: ObservableObject {
     private func handleConnectionLoss(_ error: Error) {
         RemoteDiagnostics.log("connection lost: \(error.localizedDescription)")
         tearDownSocket()
-        clearMixerState()
+        clearLiveConnectionState()
         guard wantsConnection else { return }
         retryAttempt += 1
         if retryAttempt > maxRetries {
@@ -478,6 +478,12 @@ final class RemoteControlStore: ObservableObject {
         selectedLevelID = "root"
         editingKeys.removeAll()
         lastSent.removeAll()
+    }
+
+    private func clearLiveConnectionState() {
+        clearMixerState()
+        clearPresentedData()
+        loadState = .idle
     }
 
     // MARK: Installed module discovery and hot-swap
@@ -907,6 +913,7 @@ final class RemoteControlStore: ObservableObject {
         parameters.removeAll { $0.component == component }
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         customComponentUIURLs.removeValue(forKey: component)
     }
 
@@ -1096,9 +1103,10 @@ final class RemoteControlStore: ObservableObject {
         let generation = connectionGeneration
         let text = Self.jsonString(message)
         Task { [weak self] in
+            guard let self, self.isCurrentGeneration(generation) else { return }
             do { try await task.send(.string(text)) }
             catch {
-                guard let self, generation == self.connectionGeneration else { return }
+                guard self.isCurrentGeneration(generation) else { return }
                 self.handleConnectionLoss(error)
             }
         }
@@ -1495,6 +1503,14 @@ final class RemoteControlStore: ObservableObject {
                component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil) else {
             // Never silently classify an unlabelled FX response as instrument parameters.
             RemoteDiagnostics.log("chain_params missing or unknown component; ignored")
+            return
+        }
+        switch wireTarget {
+        case .slot:
+            guard component == "synth" || component.range(of: #"^(midi_fx|fx)[1-8]$"#, options: .regularExpression) != nil else { return }
+        case .masterFX:
+            guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else { return }
+        case .tool, .unverified:
             return
         }
         guard let items = message["data"] as? [[String: Any]] else {
