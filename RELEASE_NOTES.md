@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Phase 5 (integrated workspace QA)
+
+**Build gate:** Build #369, commit `20c9aca`, completed successfully before this phase.
+
+**What was corrected:** In the prior hybrid workspace, switching between instrument slots reset the selected chain component to Instrument, and the Performance View's Design shortcut also reset it. Parameter-group selection was global to the active editor and could not recall a group after a slot switch. The integrated workspace now remembers a selected component per destination, preserves that selection when using Perform's Design shortcut, and remembers instrument hierarchy page selection per slot and confirmed instrument identity.
+
+**How:** Added view-local component and page selection helpers in `NativeControlsScreen.swift`. Slot selector buttons, Signal Chain cards and the Design component picker now share the same selection handler. Instrument page chips and the long-hierarchy picker save the requested page under a slot-plus-instrument key. When fresh hierarchy metadata arrives, restoration occurs only if Schwung still reports the saved page. Added a small, testable `RemoteWorkspaceContextPolicy` in `RemoteControlModels.swift` and regression checks for separate slots, unknown identity, missing metadata and removed pages. Device live values and WebSocket ownership remain exclusively in `RemoteControlStore`.
+
+**Why:** Perform, Chain and Design must refer to the same sound-design context rather than silently reverting to the instrument whenever a user changes views or slots. Validating restoration against *fresh* hierarchy metadata prevents obsolete page references from being presented as working device controls.
+
+**Affected files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `files for chatgpt/SchwungPocket/RemoteControlModels.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Scope/limitations:** Restoration is session-local and does not persist across application relaunches. Page memory is for instrument hierarchy groups, not FX-specific custom web panels. A module occupying a different position or a renamed module is treated as a distinct context. The old section-order preferences still need adaptation for the new dedicated workspace views. CI validates the code but not physical Move behavior.
+
+**Next action and test decision:** Confirm CI and perform optional no-Move navigation/visual QA. No immediate hardware test is necessary for this presentation-state change; **one consolidated iPhone + Move hardware regression is recommended before calling v0.9 release-ready**, covering all Phase 1–5 flows and M1.18–M1.24 synchronization changes. No merge to main.
+
 ## v0.9 Hybrid Workspace · Phase 4 (Parameter Studio)
 
 **What:** Parameter Studio now offers direct switching between reported MIDI FX, instrument and audio FX positions, plus a Master FX position selector where appropriate. Instrument groups with eight or fewer hierarchy levels are shown as horizontally scrollable one-tap page chips; larger hierarchies retain a dropdown. Numeric knob grids respond to their actual available width, targeting four compact portrait controls and up to eight controls on wide layouts. The parameter card labels Master FX correctly.

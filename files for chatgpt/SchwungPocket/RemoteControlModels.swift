@@ -30,6 +30,23 @@ enum RemoteDestination: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// Workspace-only selection is not device state. Restore a saved parameter
+/// page only if the active module still advertises that page. A module name
+/// is part of the cache key so two synths using "filter" do not share a page
+/// by accident. No device subscription or write is implied.
+enum RemoteWorkspaceContextPolicy {
+    static func groupKey(destination: RemoteDestination, moduleName: String) -> String? {
+        let normalized = moduleName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return destination.rawValue + ":" + normalized
+    }
+
+    static func restoredGroup(_ requested: String?, available: [RemoteLevel]) -> String? {
+        guard let requested, available.contains(where: { $0.id == requested }) else { return nil }
+        return requested
+    }
+}
+
 /// How a destination is addressed on the wire.
 enum RemoteWireTarget: Equatable {
     /// Addressed through the `slot` field of the observed Remote UI messages.

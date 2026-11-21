@@ -367,6 +367,31 @@ struct RemoteControlRegression {
               currentGeneration: 5, cancelled: true),
               "cancelled catalogue request must be discarded")
 
+        // Hybrid workspace context restores only for the same instrument
+        // and only when the instrument still exposes that group.
+        check(RemoteWorkspaceContextPolicy.groupKey(
+            destination: .slot1, moduleName: "Synth_esis") == "slot1:Synth_esis",
+            "workspace context must include slot and module name")
+        check(RemoteWorkspaceContextPolicy.groupKey(
+            destination: .slot2, moduleName: "Synth_esis") == "slot2:Synth_esis",
+            "workspace page selections cannot leak between slots")
+        check(RemoteWorkspaceContextPolicy.groupKey(
+            destination: .slot1, moduleName: "   ") == nil,
+            "missing instrument identity cannot be used for restoration")
+        let studioLevels = [
+            RemoteLevel(id: "root", name: "Main", parameterKeys: []),
+            RemoteLevel(id: "filter", name: "Filter", parameterKeys: [])
+        ]
+        check(RemoteWorkspaceContextPolicy.restoredGroup(
+            "filter", available: studioLevels) == "filter",
+            "previously selected group is restored when still advertised")
+        check(RemoteWorkspaceContextPolicy.restoredGroup(
+            "osc2", available: studioLevels) == nil,
+            "disappeared module page must not be restored")
+        check(RemoteWorkspaceContextPolicy.restoredGroup(
+            "filter", available: []) == nil,
+            "parameter group cannot restore before fresh metadata arrives")
+
         // Reconnection delays are capped and a stale or cancelled timer
         // cannot reopen a superseded socket generation.
         check(RemoteReconnectPolicy.delaySeconds(for: 0, maxRetries: 6) == nil,
@@ -392,6 +417,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace context, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

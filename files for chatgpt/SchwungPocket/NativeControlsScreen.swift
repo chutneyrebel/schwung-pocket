@@ -67,6 +67,8 @@ struct NativeControlsScreen: View {
     @StateObject private var remote = RemoteControlStore()
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
+    @State private var rememberedSlotComponents: [RemoteDestination: SchwungChainComponent] = [:]
+    @State private var rememberedInstrumentGroups: [String: String] = [:]
     @State private var workspace: TrollerWorkspace = .perform
     @State private var parameterStudioWidth: CGFloat = 320
     @State private var showingModulePicker = false
@@ -152,6 +154,9 @@ struct NativeControlsScreen: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active { remote.appDidBecomeActive() }
             else if phase == .background { remote.appDidEnterBackground() }
+        }
+        .onChange(of: remote.levels) { _ in
+            restoreSelectedInstrumentGroup()
         }
         .sheet(isPresented: $showingModulePicker) {
             if isMasterFX {
@@ -292,7 +297,6 @@ struct NativeControlsScreen: View {
                         .buttonStyle(StudioSecondaryButton())
                     }
                     Button {
-                        if isInstrumentSlot { selectedChainComponent = .instrument }
                         workspace = .design
                     } label: {
                         Label(isTool ? "Tool State" : "Design",
@@ -312,7 +316,8 @@ struct NativeControlsScreen: View {
         if isMasterFX {
             return remote.componentNames[remote.selectedMasterFXComponent] ?? "Master FX"
         }
-        if let installed = remote.componentNames["synth"] { return installed }
+        if let installed = remote.componentNames[selectedChainComponent.rawValue] { return installed }
+        if selectedChainComponent != .instrument { return selectedChainComponent.title }
         return remote.instrumentName.isEmpty ? "No instrument reported" : remote.instrumentName
     }
 
@@ -321,6 +326,48 @@ struct NativeControlsScreen: View {
         if isTool { return "Open the Tool status and any available custom controls." }
         if isMasterFX { return "Open Master FX modules or edit the selected effect." }
         return "Open the instrument controls or inspect the full signal chain."
+    }
+
+    /// Switching between the three UI workspaces is local and never
+    /// issues another Schwung subscription. Remember component selection
+    /// per slot so returning to the mixer does not erase sound-design context.
+    private func selectWorkspaceComponent(_ component: SchwungChainComponent) {
+        selectedChainComponent = component
+        if isInstrumentSlot {
+            rememberedSlotComponents[remote.destination] = component
+        }
+    }
+
+    private func selectWorkspaceDestination(_ destination: RemoteDestination) {
+        guard destination != remote.destination else { return }
+        if isInstrumentSlot {
+            rememberedSlotComponents[remote.destination] = selectedChainComponent
+        }
+        remote.select(destination)
+        selectedChainComponent = rememberedSlotComponents[destination] ?? .instrument
+    }
+
+    private var currentInstrumentGroupKey: String? {
+        guard isInstrumentSlot, selectedChainComponent == .instrument,
+              let module = remote.componentNames["synth"] else { return nil }
+        return RemoteWorkspaceContextPolicy.groupKey(
+            destination: remote.destination, moduleName: module
+        )
+    }
+
+    private func selectInstrumentGroup(_ groupID: String) {
+        remote.selectedLevelID = groupID
+        if let key = currentInstrumentGroupKey {
+            rememberedInstrumentGroups[key] = groupID
+        }
+    }
+
+    private func restoreSelectedInstrumentGroup() {
+        guard let key = currentInstrumentGroupKey,
+              let groupID = RemoteWorkspaceContextPolicy.restoredGroup(
+                rememberedInstrumentGroups[key], available: remote.levels
+              ), remote.selectedLevelID != groupID else { return }
+        remote.selectedLevelID = groupID
     }
 
     private var workspaceSwitcher: some View {
@@ -534,8 +581,7 @@ struct NativeControlsScreen: View {
                     onSoloToggle: { slot, soloed in remote.setSlotSoloed(soloed, slot: slot) }
                 ) { destination in
                     withAnimation(.easeInOut(duration: 0.16)) {
-                        selectedChainComponent = .instrument
-                        remote.select(destination)
+                        selectWorkspaceDestination(destination)
                     }
                 }
             }
@@ -607,7 +653,7 @@ struct NativeControlsScreen: View {
     }
 
     private func openModulePicker(for component: SchwungChainComponent) {
-        selectedChainComponent = component
+        selectWorkspaceComponent(component)
         remote.loadSlotModules(address: device.addressText)
         showingModulePicker = true
     }
@@ -641,7 +687,7 @@ struct NativeControlsScreen: View {
                         VStack(alignment: .leading, spacing: 7) {
                             Button {
                                 withAnimation(.easeInOut(duration: 0.16)) {
-                                    selectedChainComponent = component
+                                    selectWorkspaceComponent(component)
                                     if moduleName != nil {
                                         workspace = .design
                                     } else if remote.isConnected {
@@ -703,7 +749,7 @@ struct NativeControlsScreen: View {
                                 .buttonStyle(StudioSecondaryButton())
                                 .disabled(!remote.isConnected || moduleName == nil)
                                 Button {
-                                    selectedChainComponent = component
+                                    selectWorkspaceComponent(component)
                                     showingClearConfirmation = true
                                 } label: {
                                     Image(systemName: "trash")
@@ -750,7 +796,10 @@ struct NativeControlsScreen: View {
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1.2)
                             .foregroundStyle(Theme.muted)
-                        Picker("Component", selection: $selectedChainComponent) {
+                        Picker("Component", selection: Binding(
+                            get: { selectedChainComponent },
+                            set: { selectWorkspaceComponent($0) }
+                        )) {
                             ForEach(chainComponents) { component in
                                 let label = remote.componentNames[component.rawValue]
                                 Text("\(component.title) · \(label ?? "Empty")").tag(component)
@@ -805,7 +854,7 @@ struct NativeControlsScreen: View {
                                     ForEach(remote.levels) { level in
                                         let selected = remote.selectedLevelID == level.id
                                         Button {
-                                            remote.selectedLevelID = level.id
+                                            selectInstrumentGroup(level.id)
                                         } label: {
                                             Text(level.name)
                                                 .font(.system(size: 11, weight: .semibold))
@@ -823,7 +872,10 @@ struct NativeControlsScreen: View {
                             }
                             .accessibilityLabel("Instrument parameter groups")
                         } else {
-                            Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
+                            Picker("Instrument parameter group", selection: Binding(
+                                get: { remote.selectedLevelID },
+                                set: { selectInstrumentGroup($0) }
+                            )) {
                                 ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
                             }
                             .pickerStyle(.menu)
