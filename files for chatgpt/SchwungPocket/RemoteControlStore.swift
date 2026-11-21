@@ -700,6 +700,23 @@ final class RemoteControlStore: ObservableObject {
 
     /// Removes the module from a slot chain position using Schwung's
     /// documented remote-UI convention: write "none" to "<component>:module".
+    /// Whether Schwung has explicitly reported membership for this position.
+    /// A missing component name alone is not evidence of an empty position.
+    func isChainMembershipConfirmed(_ component: String) -> Bool {
+        guard isConnected else { return false }
+        switch wireTarget {
+        case .slot:
+            if component == "synth" { return confirmedChainSections.contains("synth") }
+            if component.hasPrefix("midi_fx") { return confirmedChainSections.contains("midi_fx") }
+            if component.hasPrefix("fx") { return confirmedChainSections.contains("fx") }
+            return false
+        case .masterFX:
+            return component.hasPrefix("master_fx:fx") &&
+                confirmedChainSections.contains("master_fx")
+        case .tool, .unverified: return false
+        }
+    }
+
     func clearSlotModule(component: String) {
         guard isConnected, case .slot(let slot) = wireTarget else { return }
         let isInstrument = component == "synth"

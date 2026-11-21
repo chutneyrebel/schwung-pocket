@@ -117,7 +117,7 @@ struct NativeControlsScreen: View {
     @AppStorage("SchwungPocket.TrollerInitialWorkspace.v1") private var initialWorkspace = "perform"
     @State private var parameterStudioWidth: CGFloat = 320
     @State private var showingModulePicker = false
-    @State private var showingClearConfirmation = false
+    @State private var pendingSlotClearIntent: RemoteSlotClearIntent?
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
@@ -218,13 +218,25 @@ struct NativeControlsScreen: View {
                 ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
             }
         }
-        .alert("Clear \(selectedChainComponent.title)?", isPresented: $showingClearConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Clear Module", role: .destructive) {
-                remote.clearSlotModule(component: selectedChainComponent.rawValue)
+        .confirmationDialog(
+            "Clear selected slot module?",
+            isPresented: Binding(
+                get: { pendingSlotClearIntent != nil },
+                set: { if !$0 { pendingSlotClearIntent = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let intent = pendingSlotClearIntent {
+                Button("Clear Module", role: .destructive) {
+                    if intent.isCurrent(destination: remote.destination) {
+                        remote.clearSlotModule(component: intent.component)
+                    }
+                    pendingSlotClearIntent = nil
+                }
             }
+            Button("Cancel", role: .cancel) { pendingSlotClearIntent = nil }
         } message: {
-            Text("This unloads the module from the selected signal-chain position.")
+            Text("This removes the chosen module from its original chain position. It cannot be redirected by changing the selected component.")
         }
         .confirmationDialog(
             "Clear Master FX position?",
@@ -539,7 +551,9 @@ struct NativeControlsScreen: View {
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .buttonStyle(StudioSecondaryButton())
-                    .disabled(!remote.isConnected)
+                    .disabled(!remote.isConnected ||
+                              (isInstrumentSlot && !remote.isChainMembershipConfirmed(selectedChainComponent.rawValue)) ||
+                              (isMasterFX && !remote.isChainMembershipConfirmed(remote.selectedMasterFXComponent)))
                     .accessibilityLabel(installed ? "Swap selected module" : "Add a module to selected position")
                 }
                 .padding(11)
@@ -782,14 +796,24 @@ struct NativeControlsScreen: View {
         }
     }
 
-    /// Do not imply a disconnected Move has confirmed empty positions.
+    /// Missing names are only confirmed empty when the corresponding
+    /// chain section has been received, not merely when the socket is up.
+    private func chainPositionState(_ component: String, moduleName: String?) -> RemoteChainPositionPresentation {
+        RemoteChainPositionPresentation.resolve(
+            connected: remote.isConnected,
+            membershipConfirmed: remote.isChainMembershipConfirmed(component),
+            moduleLoaded: moduleName != nil,
+            bypassed: remote.isComponentBypassed(component)
+        )
+    }
+
     private func chainPositionStatus(_ component: String, moduleName: String?) -> String {
-        guard remote.isConnected else { return "OFFLINE" }
-        guard moduleName != nil else { return "EMPTY POSITION" }
-        return remote.isComponentBypassed(component) ? "BYPASSED" : "ACTIVE"
+        chainPositionState(component, moduleName: moduleName).label
     }
 
     private func openModulePicker(for component: SchwungChainComponent) {
+        guard remote.isConnected,
+              remote.isChainMembershipConfirmed(component.rawValue) else { return }
         selectWorkspaceComponent(component)
         remote.loadSlotModules(address: device.addressText)
         showingModulePicker = true
@@ -829,7 +853,8 @@ struct NativeControlsScreen: View {
                             .font(.system(size: 11, weight: .bold))
                     }
                     .buttonStyle(StudioSecondaryButton())
-                    .disabled(!remote.isConnected)
+                    .disabled(!remote.isConnected ||
+                              !remote.isChainMembershipConfirmed(selectedChainComponent.rawValue))
                     .accessibilityLabel("Add or swap module at \(selectedChainComponent.title)")
                 }
                 ForEach(SignalChainStage.allCases) { stage in
@@ -863,7 +888,7 @@ struct NativeControlsScreen: View {
                                     selectWorkspaceComponent(component)
                                     if moduleName != nil {
                                         workspace = .design
-                                    } else if remote.isConnected {
+                                    } else if chainPositionState(component.rawValue, moduleName: moduleName).canAdd {
                                         openModulePicker(for: component)
                                     }
                                 }
@@ -880,7 +905,9 @@ struct NativeControlsScreen: View {
                                             .lineLimit(1)
                                             .minimumScaleFactor(0.8)
                                     }
-                                    Text(moduleName ?? (remote.isConnected ? "Not loaded" : "Waiting for Move"))
+                                    Text(moduleName ?? (remote.isConnected
+                                         ? (remote.isChainMembershipConfirmed(component.rawValue) ? "Not loaded" : "Checking Move")
+                                         : "Waiting for Move"))
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
@@ -893,7 +920,8 @@ struct NativeControlsScreen: View {
                                     }
                                     .foregroundStyle(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
                                     Text(moduleName == nil
-                                         ? (remote.isConnected ? "ADD MODULE" : "NOT CONNECTED")
+                                         ? (chainPositionState(component.rawValue, moduleName: moduleName).canAdd
+                                            ? "ADD MODULE" : "AWAITING STATUS")
                                          : "EDIT PARAMETERS")
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundStyle(moduleName == nil ? Theme.muted : Theme.accent)
@@ -904,10 +932,12 @@ struct NativeControlsScreen: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(moduleName == nil
-                                ? "\(component.title), \(remote.isConnected ? "empty, add a module" : "not connected")"
+                                ? "\(component.title), \(chainPositionStatus(component.rawValue, moduleName: nil))"
                                 : "\(component.title), \(moduleName ?? ""), open Design")
                             if moduleName == nil {
-                                Text(remote.isConnected ? "Tap to add a module" : "Connect to inspect")
+                                Text(chainPositionState(component.rawValue, moduleName: nil).canAdd
+                                     ? "Tap to add a module"
+                                     : (remote.isConnected ? "Waiting for module status" : "Connect to inspect"))
                                     .font(.system(size: 9, weight: .medium))
                                     .foregroundStyle(Theme.muted)
                             }
@@ -928,7 +958,9 @@ struct NativeControlsScreen: View {
                                 .disabled(!remote.isConnected || moduleName == nil)
                                 Button {
                                     selectWorkspaceComponent(component)
-                                    showingClearConfirmation = true
+                                    pendingSlotClearIntent = RemoteSlotClearIntent(
+                                        destination: remote.destination, component: component.rawValue
+                                    )
                                 } label: {
                                     Image(systemName: "trash")
                                         .font(.system(size: 10, weight: .bold))
@@ -1272,7 +1304,8 @@ struct NativeControlsScreen: View {
                             .font(.system(size: 11, weight: .bold))
                     }
                     .buttonStyle(StudioSecondaryButton())
-                    .disabled(!remote.isConnected)
+                    .disabled(!remote.isConnected ||
+                              !remote.isChainMembershipConfirmed(remote.selectedMasterFXComponent))
                     Button {
                         pendingMasterFXClearComponent = remote.selectedMasterFXComponent
                     } label: {
@@ -1292,7 +1325,7 @@ struct NativeControlsScreen: View {
                                 remote.selectedMasterFXComponent = key
                                 if moduleName != nil {
                                     workspace = .design
-                                } else if remote.isConnected {
+                                } else if chainPositionState(key, moduleName: moduleName).canAdd {
                                     remote.loadSlotModules(address: device.addressText)
                                     showingModulePicker = true
                                 }
@@ -1305,7 +1338,9 @@ struct NativeControlsScreen: View {
                                         Text("Master FX \(index)")
                                             .font(.system(size: 12, weight: .bold))
                                     }
-                                    Text(moduleName ?? (remote.isConnected ? "Tap to add effect" : "Waiting for Move"))
+                                    Text(moduleName ?? (remote.isConnected
+                                         ? (remote.isChainMembershipConfirmed(key) ? "Tap to add effect" : "Checking Move")
+                                         : "Waiting for Move"))
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
@@ -1327,7 +1362,7 @@ struct NativeControlsScreen: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(moduleName == nil
-                                ? "Master FX \(index), \(remote.isConnected ? "empty, add an effect" : "not connected")"
+                                ? "Master FX \(index), \(chainPositionStatus(key, moduleName: nil))"
                                 : "Master FX \(index), \(moduleName ?? ""), open Design")
 
                         }
@@ -1345,7 +1380,9 @@ struct NativeControlsScreen: View {
                                                 moduleName: remote.componentNames[remote.selectedMasterFXComponent]))
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
-                            .foregroundStyle(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success)
+                            .foregroundStyle(remote.componentNames[remote.selectedMasterFXComponent] == nil
+                                             ? Theme.muted
+                                             : (remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success))
                         Text(remote.componentNames[remote.selectedMasterFXComponent] ?? "No effect in this position")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(Theme.muted)

@@ -31,6 +31,39 @@ enum RemoteWorkspacePreferences {
     }
 }
 
+/// Chain cards must not infer an empty position from missing metadata.
+/// Confirmation belongs to the owning Schwung section, not socket status alone.
+enum RemoteChainPositionPresentation: Equatable {
+    case offline, unknown, empty, loaded, bypassed
+    static func resolve(connected: Bool, membershipConfirmed: Bool,
+                        moduleLoaded: Bool, bypassed: Bool) -> Self {
+        guard connected else { return .offline }
+        guard membershipConfirmed else { return .unknown }
+        guard moduleLoaded else { return .empty }
+        return bypassed ? .bypassed : .loaded
+    }
+    var label: String {
+        switch self {
+        case .offline: return "OFFLINE"
+        case .unknown: return "CHECKING"
+        case .empty: return "EMPTY POSITION"
+        case .loaded: return "ACTIVE"
+        case .bypassed: return "BYPASSED"
+        }
+    }
+    var canAdd: Bool { self == .empty }
+}
+
+/// A destructive action retains the originally requested destination and
+/// component. A later UI selection cannot retarget the confirmation.
+struct RemoteSlotClearIntent: Equatable {
+    let destination: RemoteDestination
+    let component: String
+    func isCurrent(destination: RemoteDestination) -> Bool {
+        self.destination == destination
+    }
+}
+
 // MARK: - Destinations
 
 /// The six destinations shown in the Native Controls selector.

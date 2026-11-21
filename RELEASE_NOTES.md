@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Code-only integration QA · Chain certainty and safe Clear
+
+**Build gate:** GitHub Actions #374 passed on commit `4c83634` before this QA batch.
+
+**What was fixed:** A connected Schwung socket does not prove every signal-chain section has been reported. The UI previously represented a missing module name as EMPTY and offered Add even when `slot_info` explicitly marked that MIDI FX / Instrument / Audio FX section unknown. It now distinguishes OFFLINE, CHECKING, EMPTY, ACTIVE and BYPASSED, only advertising empty-position Add once the owning section's membership is confirmed. This applies to slot chains and Master FX. A separate destructive-action risk existed because the old Clear dialog read the currently selected chain component at confirmation time. Clear now captures its original slot destination and component key; it refuses the write if destination has changed, rather than targeting a different position.
+
+**How:** Added a pure `RemoteChainPositionPresentation` policy and `RemoteSlotClearIntent` identity guard in `RemoteControlModels.swift`. `RemoteControlStore.isChainMembershipConfirmed` exposes the existing internal `confirmedChainSections` without creating new subscriptions or protocol commands. `NativeControlsScreen.swift` now uses this policy for status text, Add availability and accessibility, and uses a captured confirmation intent for slot module deletion. Tests cover connection/metadata combinations and stable destructive intent identity.
+
+**Why:** Never present unknown remote state as established truth or permit a destructive action to drift to a different slot/component while a confirmation is open. This is a correctness and safety improvement, not a visual redesign.
+
+**Affected files:** `RemoteControlModels.swift`, `RemoteControlStore.swift`, `NativeControlsScreen.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limits:** True bypass status still depends on device state received through Schwung; the app does not invent missing flags. Master FX and Tool commands are unchanged. Physical behavior, particularly partial metadata updates after swaps and reconnects, remains pending the user's deferred combined hardware session.
+
+**Verification:** Run automated Swift syntax, remote regression and iOS build. No hardware test requested. Do not merge to `main`.
+
 ## v0.9 Hybrid Workspace · Signal Chain interaction design
 
 **Build gate:** Build #373 for commit `ccccab3` passed prior to these changes.

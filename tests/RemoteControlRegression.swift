@@ -384,6 +384,31 @@ struct RemoteControlRegression {
         check(RemoteWorkspacePreferences.movedOrder("perform,chain,design", from: 0, by: -1) ==
               ["perform", "chain", "design"], "invalid order moves are ignored")
 
+        // UI must not mistake a connected but incompletely reported chain
+        // for an empty position. Add is permitted only for confirmed empties.
+        check(RemoteChainPositionPresentation.resolve(
+            connected: false, membershipConfirmed: true, moduleLoaded: false, bypassed: false) == .offline,
+            "disconnected state must override old membership")
+        check(RemoteChainPositionPresentation.resolve(
+            connected: true, membershipConfirmed: false, moduleLoaded: false, bypassed: false) == .unknown,
+            "unknown membership cannot be called empty")
+        check(!RemoteChainPositionPresentation.resolve(
+            connected: true, membershipConfirmed: false, moduleLoaded: false, bypassed: false).canAdd,
+            "unknown membership must not offer Add")
+        check(RemoteChainPositionPresentation.resolve(
+            connected: true, membershipConfirmed: true, moduleLoaded: false, bypassed: false).canAdd,
+            "confirmed empty position offers Add")
+        check(RemoteChainPositionPresentation.resolve(
+            connected: true, membershipConfirmed: true, moduleLoaded: true, bypassed: false) == .loaded,
+            "loaded module has active state")
+        check(RemoteChainPositionPresentation.resolve(
+            connected: true, membershipConfirmed: true, moduleLoaded: true, bypassed: true) == .bypassed,
+            "bypassed module must remain distinct from empty")
+        let clearIntent = RemoteSlotClearIntent(destination: .slot1, component: "fx2")
+        check(clearIntent.isCurrent(destination: .slot1), "Clear valid for original destination")
+        check(!clearIntent.isCurrent(destination: .slot2), "Clear cannot retarget a new slot")
+        check(clearIntent.component == "fx2", "Clear must retain original component")
+
         // Hybrid workspace context restores only for the same instrument
         // and only when the instrument still exposes that group.
         check(RemoteWorkspaceContextPolicy.groupKey(
@@ -434,6 +459,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, chain certainty and clear intent, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }
