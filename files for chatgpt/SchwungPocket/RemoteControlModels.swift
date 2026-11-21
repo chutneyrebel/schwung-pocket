@@ -456,6 +456,17 @@ struct RemoteValueReconciler {
         pending[key] = Pending(value: value, createdAt: uptime)
     }
 
+    /// The UI should not resend a device-confirmed value. However a value
+    /// only written to the socket (not echoed by Schwung) may be explicitly
+    /// sent again by a later user action once the echo grace has elapsed.
+    /// This never schedules automatic retries.
+    func allowsUserWrite(_ value: String, key: String,
+                         lastReportedOrSent: String?, at uptime: TimeInterval) -> Bool {
+        guard lastReportedOrSent == value else { return true }
+        guard let unconfirmed = pending[key] else { return false }
+        return uptime - unconfirmed.createdAt >= Self.staleEchoGrace
+    }
+
     /// Returns whether the received device value should replace local state.
     mutating func accepts(_ deviceValue: String, key: String, at uptime: TimeInterval) -> Bool {
         guard let current = pending[key] else { return true }

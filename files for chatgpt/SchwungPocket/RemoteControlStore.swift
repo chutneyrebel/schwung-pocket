@@ -1129,14 +1129,20 @@ final class RemoteControlStore: ObservableObject {
         guard isConnected else { return }
         switch wireTarget {
         case .slot(let slot):
-            guard lastSent[parameter.wireKey] != text else { return }
+            let scopeKey = "slot:\(slot):\(parameter.wireKey)"
+            guard valueReconciler.allowsUserWrite(text, key: scopeKey,
+                  lastReportedOrSent: lastSent[parameter.wireKey],
+                  at: ProcessInfo.processInfo.systemUptime) else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
             gestureWrites.changedValue(text, for: parameter.wireKey)
             valueReconciler.wrote(text, key: "slot:\(slot):\(parameter.wireKey)", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
         case .masterFX:
-            guard lastSent[parameter.wireKey] != text else { return }
+            let scopeKey = "masterFX:\(parameter.wireKey)"
+            guard valueReconciler.allowsUserWrite(text, key: scopeKey,
+                  lastReportedOrSent: lastSent[parameter.wireKey],
+                  at: ProcessInfo.processInfo.systemUptime) else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
             gestureWrites.changedValue(text, for: parameter.wireKey)

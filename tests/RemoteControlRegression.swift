@@ -149,6 +149,33 @@ struct RemoteControlRegression {
         queue.discardContinuous(prefix: "set_master_fx_param:-1:master_fx:fx2:")
         check(queue.count == 1 && queue.dequeue()?.text == "master fx other", "master FX positions are independently invalidated")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation and gesture finalization")
+        // An unchanged device-confirmed value is never echoed back by the UI.
+        // An unconfirmed value becomes eligible for ONE user-initiated
+        // resend after the grace window, not an automatic background retry.
+        var retry = RemoteValueReconciler()
+        check(!retry.allowsUserWrite("0.5", key: "slot:0:synth:cutoff",
+                                   lastReportedOrSent: "0.5", at: 20.0),
+              "confirmed unchanged values must not be resent")
+        retry.wrote("0.5", key: "slot:0:synth:cutoff", at: 20.0)
+        check(!retry.allowsUserWrite("0.5", key: "slot:0:synth:cutoff",
+                                   lastReportedOrSent: "0.5", at: 20.4),
+              "too-recent unconfirmed write must not duplicate")
+        check(retry.allowsUserWrite("0.5", key: "slot:0:synth:cutoff",
+                                  lastReportedOrSent: "0.5", at: 21.1),
+              "user may repeat an unconfirmed value after grace")
+        check(retry.allowsUserWrite("0.7", key: "slot:0:synth:cutoff",
+                                  lastReportedOrSent: "0.5", at: 20.1),
+              "new user values always override an older pending write")
+        retry.wrote("0.5", key: "slot:0:synth:cutoff", at: 21.1)
+        check(!retry.allowsUserWrite("0.5", key: "slot:0:synth:cutoff",
+                                   lastReportedOrSent: "0.5", at: 21.2),
+              "a repeat attempt resets grace for its key")
+        check(retry.accepts("0.50", key: "slot:0:synth:cutoff", at: 21.4),
+              "numeric confirmation clears pending status")
+        check(!retry.allowsUserWrite("0.5", key: "slot:0:synth:cutoff",
+                                   lastReportedOrSent: "0.5", at: 30.0),
+              "confirmed values never become retryable with age")
+
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation and user-driven resend")
     }
 }
