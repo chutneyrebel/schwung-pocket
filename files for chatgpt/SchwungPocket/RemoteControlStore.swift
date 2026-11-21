@@ -1527,6 +1527,22 @@ final class RemoteControlStore: ObservableObject {
             RemoteDiagnostics.log("chain_params missing or unknown component; ignored")
             return
         }
+        // Do not mix queued slot metadata with Master FX controls.
+        switch wireTarget {
+        case .slot:
+            guard component == "synth" ||
+                  component.range(of: #"^(midi_fx|fx)[1-8]$"#, options: .regularExpression) != nil else {
+                RemoteDiagnostics.log("ignored non-slot chain_params for active slot")
+                return
+            }
+        case .masterFX:
+            guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
+                RemoteDiagnostics.log("ignored slot chain_params for Master FX")
+                return
+            }
+        case .tool, .unverified:
+            return
+        }
         guard let items = message["data"] as? [[String: Any]] else {
             RemoteDiagnostics.log("chain_params without array data")
             return
