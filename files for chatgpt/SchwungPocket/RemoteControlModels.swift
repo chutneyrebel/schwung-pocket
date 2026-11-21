@@ -403,6 +403,24 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Parameter metadata refresh reconciliation
+
+/// A module may replace one control's range/options while retaining its key.
+/// Reset only previously known definitions that changed or vanished; preserve
+/// live values and gestures for unchanged controls (and brand-new controls,
+/// whose initial param_update might already have arrived).
+enum RemoteParameterMetadataDiff {
+    static func invalidatedKeys(previous: [RemoteParameter],
+                                incoming: [RemoteParameter]) -> [String] {
+        let current = Dictionary(incoming.map { ($0.wireKey, $0) },
+                                 uniquingKeysWith: { _, newest in newest })
+        return previous.compactMap { old in
+            guard current[old.wireKey] != old else { return nil }
+            return old.wireKey
+        }
+    }
+}
+
 // MARK: - Active parameter write ownership
 
 /// A view may finish a drag after its module has been replaced. The wire key

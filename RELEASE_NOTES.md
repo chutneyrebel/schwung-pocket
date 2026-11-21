@@ -14,6 +14,14 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## M1.24: Reconcile parameter definitions after module refresh
+
+- When a current module re-advertises changed or removed parameter definitions, retires the old cached value, last-sent value, editing gesture, unconfirmed echo and queued continuous writes for those exact wire keys.
+- Leaves unchanged parameter definitions and their active values/gestures alone. New definitions do not discard parameter values that arrived ahead of metadata.
+- Applies to both normal chain components and Master FX, without introducing guessed Schwung protocol messages.
+- Adds deterministic regression cases for changed ranges, removed controls, identical rebroadcasts and initial discovery.
+- **Status:** implemented on development branch; GitHub Actions and physical Move test remain separate verification gates.
+
 ## M1.23: Partial chain listing recovery
 
 - Tracks confirmed module-chain sections independently: synth, MIDI FX, audio FX, and Master FX.

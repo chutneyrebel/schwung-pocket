@@ -176,6 +176,39 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // Metadata refreshes must retire obsolete local state selectively.
+        let oldCutoff = RemoteParameter.parse([
+            "key": "cutoff", "name": "Cutoff", "type": "float",
+            "min": 0, "max": 1, "step": 0.01
+        ], component: "synth")!
+        let revisedCutoff = RemoteParameter.parse([
+            "key": "cutoff", "name": "Cutoff", "type": "float",
+            "min": 20, "max": 20000, "step": 1
+        ], component: "synth")!
+        let unchangedResonance = RemoteParameter.parse([
+            "key": "resonance", "name": "Resonance", "type": "float",
+            "min": 0, "max": 1, "step": 0.01
+        ], component: "synth")!
+        let retiredDrive = RemoteParameter.parse([
+            "key": "drive", "name": "Drive", "type": "float",
+            "min": 0, "max": 1, "step": 0.01
+        ], component: "synth")!
+        check(RemoteParameterMetadataDiff.invalidatedKeys(
+            previous: [oldCutoff, unchangedResonance, retiredDrive],
+            incoming: [revisedCutoff, unchangedResonance])
+            == ["synth:cutoff", "synth:drive"],
+            "changed and removed parameters invalidate stale writes and values")
+        check(RemoteParameterMetadataDiff.invalidatedKeys(
+            previous: [unchangedResonance],
+            incoming: [unchangedResonance]).isEmpty,
+            "identical metadata rebroadcast retains live gestures and values")
+        check(RemoteParameterMetadataDiff.invalidatedKeys(
+            previous: [], incoming: [revisedCutoff]).isEmpty,
+            "new parameter discovery preserves early values")
+        check(RemoteParameterMetadataDiff.invalidatedKeys(
+            previous: [retiredDrive], incoming: []).count == 1,
+            "empty new metadata retires previously known controls")
+
         // Two effects can reuse fx1:mix. A stale old parameter definition
         // must not be accepted just because its wire key still exists.
         let formerMix = RemoteParameter.parse([
@@ -335,6 +368,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, active control ownership, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

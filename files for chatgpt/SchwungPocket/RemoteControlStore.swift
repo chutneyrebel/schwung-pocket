@@ -1533,6 +1533,33 @@ final class RemoteControlStore: ObservableObject {
         RemoteDiagnostics.log("Tool info received: \(instrumentName.isEmpty ? "unnamed Tool" : instrumentName)")
     }
 
+    private func invalidateSupersededParameterDefinitions(
+        component: String, incoming: [RemoteParameter]
+    ) {
+        let previous = parameters.filter { $0.component == component }
+        let invalidated = RemoteParameterMetadataDiff.invalidatedKeys(
+            previous: previous, incoming: incoming
+        )
+        guard !invalidated.isEmpty else { return }
+        for key in invalidated {
+            values.removeValue(forKey: key)
+            lastSent.removeValue(forKey: key)
+            editingKeys.remove(key)
+            gestureWrites.clear(prefix: key)
+            switch wireTarget {
+            case .slot(let slot):
+                valueReconciler.clear(prefix: "slot:\(slot):\(key)")
+                pendingMessages.discardContinuous(prefix: "set_param:\(slot):\(key)")
+            case .masterFX:
+                valueReconciler.clear(prefix: "masterFX:\(key)")
+                pendingMessages.discardContinuous(prefix: "set_master_fx_param:-1:\(key)")
+            case .tool, .unverified:
+                break
+            }
+        }
+        RemoteDiagnostics.log("Retired \(invalidated.count) obsolete parameter definitions for \(component)")
+    }
+
     private func handleMasterFXChainParams(_ message: [String: Any]) {
         guard let component = message["component"] as? String,
               component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil,
@@ -1550,6 +1577,7 @@ final class RemoteControlStore: ObservableObject {
             return
         }
         let parsed = items.compactMap { RemoteParameter.parse($0, component: component) }
+        invalidateSupersededParameterDefinitions(component: component, incoming: parsed)
         parameters = parameters.filter { $0.component != component } + parsed
         loadState = .loaded
         loadTimeoutTask?.cancel()
@@ -1810,6 +1838,7 @@ final class RemoteControlStore: ObservableObject {
         }
         let parsed = items.compactMap { RemoteParameter.parse($0, component: component) }
         for parameter in parsed { RemoteDiagnostics.log(RemoteDiagnostics.describe(parameter)) }
+        invalidateSupersededParameterDefinitions(component: component, incoming: parsed)
         parameters = parameters.filter { $0.component != component } + parsed
         refreshOtherLevel()
         loadState = .loaded
