@@ -69,6 +69,9 @@ final class RemoteControlStore: ObservableObject {
     private var pendingMessages = RemoteOutboundQueue()
     private var retryTask: Task<Void, Never>?
     private var moduleCatalogTask: Task<Void, Never>?
+    private var masterFXLookupTasks: [String: Task<Void, Never>] = [:]
+    private var masterFXLookupSequence = 0
+    private var masterFXLookupTokens: [String: Int] = [:]
     private var loadTimeoutTask: Task<Void, Never>?
     private var toolRefreshTask: Task<Void, Never>?
     private var masterFXRefreshTask: Task<Void, Never>?
@@ -248,6 +251,7 @@ final class RemoteControlStore: ObservableObject {
     /// Invalidates the old socket (any in-flight callbacks see a stale generation and bail out).
     private func tearDownSocket() {
         connectionGeneration += 1
+        invalidateMasterFXLookups()
         receiveTask?.cancel()
         receiveTask = nil
         pendingSendTask?.cancel()
@@ -442,6 +446,7 @@ final class RemoteControlStore: ObservableObject {
     /// Drops everything shown for the previous selection so stale values never look current.
     private func clearPresentedData() {
         selectionGeneration += 1
+        invalidateMasterFXLookups()
         masterFXRefreshTask?.cancel()
         masterFXRefreshTask = nil
         loadTimeoutTask?.cancel()
@@ -767,6 +772,38 @@ final class RemoteControlStore: ObservableObject {
         return nil
     }
 
+    // MARK: Master FX asynchronous lookup ownership
+
+    private func invalidateMasterFXLookups() {
+        for task in masterFXLookupTasks.values { task.cancel() }
+        masterFXLookupTasks.removeAll()
+        masterFXLookupTokens.removeAll()
+    }
+
+    @discardableResult
+    private func beginMasterFXAction(component: String) -> Int {
+        masterFXLookupSequence += 1
+        masterFXLookupTasks.removeValue(forKey: component)?.cancel()
+        masterFXLookupTokens[component] = masterFXLookupSequence
+        return masterFXLookupSequence
+    }
+
+    private func masterFXLookupIsCurrent(component: String, token: Int,
+                                         socketGeneration: Int, editorGeneration: Int,
+                                         cancelled: Bool) -> Bool {
+        RemoteMasterFXLookupPolicy.isCurrent(
+            expectedToken: token,
+            activeToken: masterFXLookupTokens[component],
+            expectedSocketGeneration: socketGeneration,
+            currentSocketGeneration: connectionGeneration,
+            expectedEditorGeneration: editorGeneration,
+            currentEditorGeneration: selectionGeneration,
+            isConnected: isConnected,
+            isMasterFXSelected: destination == .masterFX,
+            cancelled: cancelled
+        )
+    }
+
     func swapMasterFXModule(component: String, moduleID: String) {
         guard isConnected, case .masterFX = wireTarget else { return }
         guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else {
@@ -779,20 +816,39 @@ final class RemoteControlStore: ObservableObject {
             slotModulesError = "That effect is not available for Master FX or must be loaded directly on the Move."
             return
         }
+        let lookupToken = beginMasterFXAction(component: component)
         if let dspPath = module.dsp_path?.trimmingCharacters(in: .whitespacesAndNewlines),
            !dspPath.isEmpty {
             sendMasterFXLoad(module: module, component: component, dspPath: dspPath)
             return
         }
 
+        let socketGeneration = connectionGeneration
+        let editorGeneration = selectionGeneration
         // The broad catalogue can omit dsp_path even though Schwung's installed
         // module endpoint has it. Resolve the selected effect directly at tap
         // time instead of making the user refresh the same incomplete catalogue.
         RemoteDiagnostics.log("Master FX swap missing cached DSP path; querying installed list for module=\(module.id)")
-        Task { [weak self] in
+        let requestedAddress = address
+        masterFXLookupTasks[component] = Task { [weak self] in
             guard let self else { return }
-            guard let addressURL = URL(string: self.address.contains("://") ? self.address : "https://\(self.address)"),
+            defer {
+                if self.masterFXLookupTokens[component] == lookupToken {
+                    self.masterFXLookupTasks.removeValue(forKey: component)
+                }
+            }
+            guard self.masterFXLookupIsCurrent(
+                component: component, token: lookupToken,
+                socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                cancelled: Task.isCancelled
+            ) else { return }
+            guard let addressURL = URL(string: requestedAddress.contains("://") ? requestedAddress : "https://\(requestedAddress)"),
                   let host = addressURL.host else {
+                guard self.masterFXLookupIsCurrent(
+                    component: component, token: lookupToken,
+                    socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                    cancelled: Task.isCancelled
+                ) else { return }
                 self.slotModulesError = "Could not read the Move address. Check Settings and retry."
                 return
             }
@@ -800,6 +856,11 @@ final class RemoteControlStore: ObservableObject {
             let schemes = originalScheme == "https" ? ["https", "http"] : [originalScheme]
             var lookupDiagnostics: [String] = []
             for scheme in schemes {
+                guard self.masterFXLookupIsCurrent(
+                    component: component, token: lookupToken,
+                    socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                    cancelled: Task.isCancelled
+                ) else { return }
                 guard var parts = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else {
                     lookupDiagnostics.append("\(scheme): invalid URL components")
                     continue
@@ -817,6 +878,11 @@ final class RemoteControlStore: ObservableObject {
                     var request = URLRequest(url: url)
                     request.timeoutInterval = 5
                     let (data, response) = try await URLSession.shared.data(for: request)
+                    guard self.masterFXLookupIsCurrent(
+                        component: component, token: lookupToken,
+                        socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                        cancelled: Task.isCancelled
+                    ) else { return }
                     guard let http = response as? HTTPURLResponse else {
                         lookupDiagnostics.append("\(scheme): no HTTP response")
                         continue
@@ -859,7 +925,11 @@ final class RemoteControlStore: ObservableObject {
                     }
                     if let match = matches.first,
                        let path = field(match, ["dsp_path", "dspPath", "dsp_path_abs", "dspPathAbs", "dsp", "path"]) {
-                        guard self.isConnected, case .masterFX = self.wireTarget else { return }
+                        guard self.masterFXLookupIsCurrent(
+                            component: component, token: lookupToken,
+                            socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                            cancelled: Task.isCancelled
+                        ) else { return }
                         RemoteDiagnostics.log("Master FX DSP path resolved using flexible installed-list parsing: module=\(module.id), path=\(path)")
                         self.sendMasterFXLoad(module: module, component: component, dspPath: path)
                         return
@@ -874,6 +944,11 @@ final class RemoteControlStore: ObservableObject {
                     lookupDiagnostics.append("\(scheme): parsed \(installed.count) entries; matching entries: \(matchingDetails.isEmpty ? "none" : matchingDetails.joined(separator: "; "))")
                     RemoteDiagnostics.log("Master FX installed-list lookup diagnostics: \(lookupDiagnostics.last ?? "no detail")")
                 } catch {
+                    guard self.masterFXLookupIsCurrent(
+                        component: component, token: lookupToken,
+                        socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                        cancelled: Task.isCancelled
+                    ) else { return }
                     lookupDiagnostics.append("\(scheme): \(error.localizedDescription)")
                     RemoteDiagnostics.log("Master FX direct DSP lookup failed on \(scheme): \(error.localizedDescription)")
                 }
@@ -886,12 +961,21 @@ final class RemoteControlStore: ObservableObject {
             if module.id == "4k-eq",
                lookupDiagnostics.contains(where: { $0.contains("HTTP 404") }) {
                 let legacyDSPPath = "/data/UserData/schwung/modules/audio_fx/4k-eq/4k-eq.so"
-                guard self.isConnected, case .masterFX = self.wireTarget else { return }
+                guard self.masterFXLookupIsCurrent(
+                    component: component, token: lookupToken,
+                    socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                    cancelled: Task.isCancelled
+                ) else { return }
                 RemoteDiagnostics.log("Using documented legacy Manager DSP path for 4K EQ: \(legacyDSPPath)")
                 self.sendMasterFXLoad(module: module, component: component, dspPath: legacyDSPPath)
                 return
             }
 
+            guard self.masterFXLookupIsCurrent(
+                component: component, token: lookupToken,
+                socketGeneration: socketGeneration, editorGeneration: editorGeneration,
+                cancelled: Task.isCancelled
+            ) else { return }
             let detail = lookupDiagnostics.joined(separator: " | ")
             self.slotModulesError = "Couldn't resolve \(module.name)'s DSP path. \(detail)"
             RemoteDiagnostics.log("Master FX swap failed: module=\(module.id); \(detail)")
@@ -934,8 +1018,9 @@ final class RemoteControlStore: ObservableObject {
             slotModulesError = "This Master FX position cannot be cleared from the app."
             return
         }
-        // Allow the clear command even if the latest listing omitted the name.
+        // Clearing supersedes a pending DSP-path resolution for this position.
         // The Move is authoritative about whether this position is occupied.
+        beginMasterFXAction(component: component)
         slotModulesError = nil
         pendingMasterFXClears[component] = Date()
         clearComponentPresentation(component)

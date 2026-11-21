@@ -403,6 +403,24 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Master FX asynchronous module resolution
+
+/// An HTTP lookup may complete after the user clears/replaces the same FX,
+/// navigates away, or reconnects. Only the request that still owns the exact
+/// component and socket/editor generations can send a DSP-path load.
+enum RemoteMasterFXLookupPolicy {
+    static func isCurrent(expectedToken: Int, activeToken: Int?,
+                          expectedSocketGeneration: Int, currentSocketGeneration: Int,
+                          expectedEditorGeneration: Int, currentEditorGeneration: Int,
+                          isConnected: Bool, isMasterFXSelected: Bool,
+                          cancelled: Bool) -> Bool {
+        activeToken == expectedToken
+            && expectedSocketGeneration == currentSocketGeneration
+            && expectedEditorGeneration == currentEditorGeneration
+            && isConnected && isMasterFXSelected && !cancelled
+    }
+}
+
 // MARK: - Async catalogue request ownership
 
 /// Only the latest Move address lookup may publish module catalogue results.

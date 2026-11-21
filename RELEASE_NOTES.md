@@ -14,6 +14,14 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## Master FX asynchronous load safety
+
+- Resolved a race where a delayed installed-module DSP-path lookup could load an effect after its position had been cleared or replaced.
+- Tracks each Master FX position's pending lookup independently. New swaps and clears cancel prior lookups for that position without disrupting another position.
+- Rejects stale HTTP completions after destination switches, disconnects, address changes, or socket replacement; stale requests cannot report errors over newer actions.
+- Added deterministic coverage for superseded module choices, clearing, connection/editor generations, cancellation and destination changes.
+- **Status:** implemented and sent through GitHub Actions; on-device Master FX swaps still require the next hardware checkpoint.
+
 ## Latest v0.9 reliability checkpoint
 
 ### Module catalogue request ownership
@@ -21,7 +29,7 @@
 - Clears an old Move's installed-module list when the address changes, so a new or failed lookup cannot offer modules from the wrong device.
 - Guards responses and loading-state cleanup with a request generation. An old request can no longer stop the spinner or overwrite the latest Move's module list.
 - Added deterministic regression checks for current, superseded and cancelled catalogue lookups.
-- **Status:** source implemented; GitHub Actions validation pending. Live Move address switching still requires hardware verification.
+- **Status:** GitHub Actions #358 build-verified; live Move address switching still requires hardware verification.
 
 ## New additions in the current development line
 

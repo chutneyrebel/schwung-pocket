@@ -176,6 +176,28 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // DSP path lookups for Master FX must be owned by the current action,
+        // connection and editor. A clear/new swap invalidates the old token.
+        func masterFXEligible(_ activeToken: Int?, socket: Int = 3,
+                              editor: Int = 9, selected: Bool = true,
+                              connected: Bool = true, cancelled: Bool = false) -> Bool {
+            RemoteMasterFXLookupPolicy.isCurrent(
+                expectedToken: 11, activeToken: activeToken,
+                expectedSocketGeneration: 3, currentSocketGeneration: socket,
+                expectedEditorGeneration: 9, currentEditorGeneration: editor,
+                isConnected: connected, isMasterFXSelected: selected,
+                cancelled: cancelled
+            )
+        }
+        check(masterFXEligible(11), "current Master FX request may load")
+        check(!masterFXEligible(12), "newer FX action invalidates older lookup")
+        check(!masterFXEligible(nil), "cleared FX request token is invalid")
+        check(!masterFXEligible(11, socket: 4), "reconnect invalidates FX lookup")
+        check(!masterFXEligible(11, editor: 10), "navigation invalidates FX lookup")
+        check(!masterFXEligible(11, selected: false), "leaving Master FX invalidates lookup")
+        check(!masterFXEligible(11, connected: false), "disconnect invalidates lookup")
+        check(!masterFXEligible(11, cancelled: true), "cancelled FX lookup cannot load")
+
         // Concurrent HTTP catalogue lookups must never publish stale results
         // or let an older completion stop the newer request's loading spinner.
         check(RemoteCatalogRequestPolicy.isCurrent(expectedGeneration: 4,
@@ -213,6 +235,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, catalogue ownership and reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, catalogue and Master FX ownership, reconnect policy")
     }
 }
