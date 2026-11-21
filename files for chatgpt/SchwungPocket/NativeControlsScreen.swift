@@ -597,6 +597,19 @@ struct NativeControlsScreen: View {
         + (1...max(remote.audioFXCapacity, 1)).map { .audioFX($0) }
     }
 
+    /// Do not imply a disconnected Move has confirmed empty positions.
+    private func chainPositionStatus(_ component: String, moduleName: String?) -> String {
+        guard remote.isConnected else { return "OFFLINE" }
+        guard moduleName != nil else { return "EMPTY POSITION" }
+        return remote.isComponentBypassed(component) ? "BYPASSED" : "ACTIVE"
+    }
+
+    private func openModulePicker(for component: SchwungChainComponent) {
+        selectedChainComponent = component
+        remote.loadSlotModules(address: device.addressText)
+        showingModulePicker = true
+    }
+
     private var slotChainCard: some View {
         PocketCard {
             VStack(alignment: .leading, spacing: 10) {
@@ -610,10 +623,10 @@ struct NativeControlsScreen: View {
                         .foregroundStyle(Theme.muted)
                     Spacer(minLength: 4)
                     Button {
-                        remote.loadSlotModules(address: device.addressText)
-                        showingModulePicker = true
+                        openModulePicker(for: selectedChainComponent)
                     } label: {
-                        Label("Swap", systemImage: "arrow.left.arrow.right")
+                        Label(remote.componentNames[selectedChainComponent.rawValue] == nil ? "Add" : "Swap",
+                              systemImage: "arrow.left.arrow.right")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .buttonStyle(StudioSecondaryButton())
@@ -629,6 +642,8 @@ struct NativeControlsScreen: View {
                                     selectedChainComponent = component
                                     if moduleName != nil {
                                         workspace = .design
+                                    } else if remote.isConnected {
+                                        openModulePicker(for: component)
                                     }
                                 }
                             } label: {
@@ -644,14 +659,14 @@ struct NativeControlsScreen: View {
                                             .lineLimit(1)
                                             .minimumScaleFactor(0.8)
                                     }
-                                    Text(moduleName ?? "Not loaded")
+                                    Text(moduleName ?? (remote.isConnected ? "Not loaded" : "Waiting for Move"))
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
                                     HStack(spacing: 5) {
                                         Image(systemName: moduleName == nil ? "circle.dashed" : (remote.isComponentBypassed(component.rawValue) ? "pause.circle.fill" : "checkmark.circle.fill"))
                                             .font(.system(size: 9, weight: .semibold))
-                                        Text(moduleName == nil ? "EMPTY POSITION" : (remote.isComponentBypassed(component.rawValue) ? "BYPASSED" : "ACTIVE"))
+                                        Text(chainPositionStatus(component.rawValue, moduleName: moduleName))
                                             .font(.system(size: 8, weight: .heavy))
                                             .tracking(0.7)
                                     }
@@ -662,6 +677,14 @@ struct NativeControlsScreen: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(moduleName == nil
+                                ? "\(component.title), \(remote.isConnected ? "empty, add a module" : "not connected")"
+                                : "\(component.title), \(moduleName ?? ""), open Design")
+                            if moduleName == nil {
+                                Text(remote.isConnected ? "Tap to add a module" : "Connect to inspect")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(Theme.muted)
+                            }
                             HStack(spacing: 8) {
                                 Button {
                                     remote.setComponentBypassed(
@@ -944,6 +967,12 @@ struct NativeControlsScreen: View {
                         HStack(spacing: 6) {
                             Button {
                                 remote.selectedMasterFXComponent = key
+                                if moduleName != nil {
+                                    workspace = .design
+                                } else if remote.isConnected {
+                                    remote.loadSlotModules(address: device.addressText)
+                                    showingModulePicker = true
+                                }
                             } label: {
                                 VStack(alignment: .leading, spacing: 5) {
                                     HStack(spacing: 6) {
@@ -953,7 +982,7 @@ struct NativeControlsScreen: View {
                                         Text("Master FX \(index)")
                                             .font(.system(size: 12, weight: .bold))
                                     }
-                                    Text(moduleName ?? "Empty slot")
+                                    Text(moduleName ?? (remote.isConnected ? "Tap to add effect" : "Waiting for Move"))
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
@@ -971,6 +1000,9 @@ struct NativeControlsScreen: View {
                                 }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(moduleName == nil
+                                ? "Master FX \(index), \(remote.isConnected ? "empty, add an effect" : "not connected")"
+                                : "Master FX \(index), \(moduleName ?? ""), open Design")
 
                         }
                     }

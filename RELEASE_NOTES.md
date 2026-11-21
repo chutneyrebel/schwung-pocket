@@ -14,6 +14,20 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Phase 3 (Signal Chain)
+
+**What:** Selecting a loaded MIDI FX, instrument, audio FX or Master FX now opens the corresponding Design view. Selecting an empty position when connected opens the existing compatible module picker. The slot toolbar identifies the action as Add or Swap based on reported membership. Disconnected positions show OFFLINE / Waiting for Move rather than being described as confirmed empty. The main module buttons have accessible actions; Bypass/Enable and destructive Clear remain separate.
+
+**How:** Existing Signal Chain SwiftUI cards now route through workspace selection and existing `ModuleSwapSheet` operations. No new server commands, subscriptions or audio write paths were added. Module status derives from existing `RemoteControlStore` connection and chain names.
+
+**Why:** Make the Chain view a fast routing-and-selection workspace. Empty positions should offer a useful action; live components should be one tap from sound design. Offline UI must avoid misleading claims about Move state.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** The slot chain is still shown using the existing two-column cards rather than a new flow diagram. Deep parameter-group restoration is Phase 4. Existing Master FX module replacement and picker compatibility remain subject to physical testing. This change only guards disconnected empty-state wording; temporarily unknown sections while connected may still require explicit confidence indicators in a later iteration.
+
+**Testing recommendation:** Automated compile/regression first; optional no-Move navigation inspection. A hardware test is **not necessary to continue Phase 4**, but the combined iPhone + Move validation must include loaded and empty positions and Master FX behavior before release.
+
 ## v0.9 Hybrid Workspace · Phase 2 (Performance View)
 
 **What changed:** Performance View now has a compact single connection/MIDI status card with Connect/Disconnect, Reload and expandable MIDI activity, the existing four-slot mixer, and a selected-destination focus card with direct Signal Chain and Design shortcuts. Tool destinations open their read-only state in Design. Removed the duplicate chain navigation button in favor of contextual actions.
