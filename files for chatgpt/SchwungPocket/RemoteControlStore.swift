@@ -64,6 +64,9 @@ final class RemoteControlStore: ObservableObject {
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var pendingSendTask: Task<Void, Never>?
+    // Only one sender task runs per socket. Pending continuous-value writes can
+    // replace older writes for the same key without dropping structural commands.
+    private var pendingMessages: [(text: String, coalescingKey: String?)] = []
     private var retryTask: Task<Void, Never>?
     private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
@@ -254,6 +257,7 @@ final class RemoteControlStore: ObservableObject {
         receiveTask = nil
         pendingSendTask?.cancel()
         pendingSendTask = nil
+        pendingMessages.removeAll()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
     }
@@ -1098,17 +1102,50 @@ final class RemoteControlStore: ObservableObject {
         guard let task = socket else { return }
         let generation = connectionGeneration
         let text = Self.jsonString(message)
-        // Chain sends to preserve the order of rapid knob changes and module
-        // commands. The socket generation guard drops work from old connections.
-        let previous = pendingSendTask
-        pendingSendTask = Task { [weak self] in
-            await previous?.value
-            guard !Task.isCancelled, let self, self.isCurrentGeneration(generation) else { return }
-            do { try await task.send(.string(text)) }
-            catch {
-                guard self.isCurrentGeneration(generation) else { return }
-                self.handleConnectionLoss(error)
+
+        // Coalesce only continuous parameter writes. Module loads, bypass,
+        // mute/solo, subscriptions and other structural commands are barriers.
+        // Never collapse writes across a barrier or across different slots.
+        let type = message["type"] as? String
+        let key = message["key"] as? String
+        let isContinuous = (type == "set_param" || type == "set_master_fx_param")
+            && key != nil
+            && !(key?.hasSuffix(":module") ?? false)
+            && !(key?.hasSuffix(":bypassed") ?? false)
+            && key != "slot:muted" && key != "slot:soloed"
+        let coalescingKey: String? = isContinuous
+            ? "\(type ?? ""):\(message["slot"] as? Int ?? -1):\(key ?? "")"
+            : nil
+        if let coalescingKey {
+            // Preserve the order of unrelated writes: remove the older unsent
+            // sample, then append the newest one to the end of this segment.
+            if let index = pendingMessages.lastIndex(where: { $0.coalescingKey == nil }) {
+                if let older = pendingMessages.indices.reversed().first(where: {
+                    $0 > index && pendingMessages[$0].coalescingKey == coalescingKey
+                }) {
+                    pendingMessages.remove(at: older)
+                }
+            } else if let older = pendingMessages.lastIndex(where: { $0.coalescingKey == coalescingKey }) {
+                pendingMessages.remove(at: older)
             }
+        }
+        pendingMessages.append((text: text, coalescingKey: coalescingKey))
+        guard pendingSendTask == nil else { return }
+        pendingSendTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled && self.isCurrentGeneration(generation) {
+                guard !self.pendingMessages.isEmpty else { break }
+                let next = self.pendingMessages.removeFirst()
+                do {
+                    try await task.send(.string(next.text))
+                } catch {
+                    guard !Task.isCancelled, self.isCurrentGeneration(generation) else { return }
+                    self.handleConnectionLoss(error)
+                    return
+                }
+            }
+            guard self.isCurrentGeneration(generation) else { return }
+            self.pendingSendTask = nil
         }
     }
 
