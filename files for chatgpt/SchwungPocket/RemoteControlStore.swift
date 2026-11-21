@@ -200,7 +200,7 @@ final class RemoteControlStore: ObservableObject {
         tearDownSocket()
         connection = .disconnected
         if loadState == .loading || loadState == .loaded { loadState = .idle }
-        clearPresentedData()
+        clearLiveConnectionState()
     }
 
     func appDidEnterBackground() {
@@ -219,6 +219,9 @@ final class RemoteControlStore: ObservableObject {
 
     private func openSocket(isRetry: Bool) {
         tearDownSocket()
+        // A new socket has no authoritative slot snapshot yet. Never present
+        // mixer or module data from the previous connection as live state.
+        clearLiveConnectionState()
         guard let url = Self.websocketURL(address: address) else {
             connection = .failed("Invalid Move address")
             wantsConnection = false
@@ -302,6 +305,7 @@ final class RemoteControlStore: ObservableObject {
     private func handleConnectionLoss(_ error: Error) {
         RemoteDiagnostics.log("connection lost: \(error.localizedDescription)")
         tearDownSocket()
+        clearLiveConnectionState()
         guard wantsConnection else { return }
         retryAttempt += 1
         if retryAttempt > maxRetries {
@@ -421,6 +425,17 @@ final class RemoteControlStore: ObservableObject {
         selectedLevelID = "root"
         editingKeys.removeAll()
         lastSent.removeAll()
+    }
+
+    /// Clear connection-scoped state, but keep the selected destination and
+    /// installed module catalogue (HTTP discovery is independently cached).
+    /// This runs on disconnect, network loss, and before each new socket.
+    private func clearLiveConnectionState() {
+        clearPresentedData()
+        slotMixStates = [:]
+        slotInstrumentNames = [:]
+        slotModuleStatuses = [:]
+        loadState = .idle
     }
 
     // MARK: Installed module discovery and hot-swap
