@@ -881,6 +881,10 @@ final class RemoteControlStore: ObservableObject {
         parameters.removeAll { $0.component == component }
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        // A knob drag may still be active when its module is swapped or cleared.
+        // Forget that editing state so the replacement module can receive fresh
+        // parameter updates instead of silently skipping matching wire keys.
+        editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         customComponentUIURLs.removeValue(forKey: component)
     }
 
