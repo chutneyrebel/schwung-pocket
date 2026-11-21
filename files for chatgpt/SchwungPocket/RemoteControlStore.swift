@@ -66,7 +66,7 @@ final class RemoteControlStore: ObservableObject {
     private var pendingSendTask: Task<Void, Never>?
     // Only one sender task runs per socket. Pending continuous-value writes can
     // replace older writes for the same key without dropping structural commands.
-    private var pendingMessages: [(text: String, coalescingKey: String?)] = []
+    private var pendingMessages = RemoteOutboundQueue()
     private var retryTask: Task<Void, Never>?
     private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
@@ -248,7 +248,7 @@ final class RemoteControlStore: ObservableObject {
         receiveTask = nil
         pendingSendTask?.cancel()
         pendingSendTask = nil
-        pendingMessages.removeAll()
+        pendingMessages.clear()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
     }
@@ -1098,26 +1098,12 @@ final class RemoteControlStore: ObservableObject {
         let coalescingKey: String? = isContinuous
             ? "\(type ?? ""):\(message["slot"] as? Int ?? -1):\(key ?? "")"
             : nil
-        if let coalescingKey {
-            // Preserve the order of unrelated writes: remove the older unsent
-            // sample, then append the newest one to the end of this segment.
-            if let index = pendingMessages.lastIndex(where: { $0.coalescingKey == nil }) {
-                if let older = pendingMessages.indices.reversed().first(where: {
-                    $0 > index && pendingMessages[$0].coalescingKey == coalescingKey
-                }) {
-                    pendingMessages.remove(at: older)
-                }
-            } else if let older = pendingMessages.lastIndex(where: { $0.coalescingKey == coalescingKey }) {
-                pendingMessages.remove(at: older)
-            }
-        }
-        pendingMessages.append((text: text, coalescingKey: coalescingKey))
+        pendingMessages.enqueue(text, coalescingKey: coalescingKey)
         guard pendingSendTask == nil else { return }
         pendingSendTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled && self.isCurrentGeneration(generation) {
-                guard !self.pendingMessages.isEmpty else { break }
-                let next = self.pendingMessages.removeFirst()
+                guard let next = self.pendingMessages.dequeue() else { break }
                 do {
                     try await task.send(.string(next.text))
                 } catch {

@@ -263,6 +263,67 @@ struct RemoteLevel: Identifiable, Hashable {
     let parameterKeys: [String]
 }
 
+
+// MARK: - Order-preserving parameter layout
+
+/// Consecutive knobs share a grid. Choice and read-only controls retain their
+/// original position instead of being moved to the end of the module page.
+enum RemoteParameterLayout {
+    static func groups(_ parameters: [RemoteParameter]) -> [[RemoteParameter]] {
+        var result: [[RemoteParameter]] = []
+        var knobs: [RemoteParameter] = []
+        for parameter in parameters {
+            if parameter.kind == .knob {
+                knobs.append(parameter)
+            } else {
+                if !knobs.isEmpty {
+                    result.append(knobs)
+                    knobs.removeAll()
+                }
+                result.append([parameter])
+            }
+        }
+        if !knobs.isEmpty { result.append(knobs) }
+        return result
+    }
+}
+
+// MARK: - Ordered WebSocket output queue
+
+/// Keeps only the newest queued continuous value for a key within the current
+/// command segment. Structural commands (nil key) are ordering barriers.
+/// Does not discard module operations, toggles, or subscription commands.
+struct RemoteOutboundQueue {
+    struct Entry {
+        let text: String
+        let coalescingKey: String?
+    }
+
+    private(set) var entries: [Entry] = []
+    var isEmpty: Bool { entries.isEmpty }
+    var count: Int { entries.count }
+
+    mutating func enqueue(_ text: String, coalescingKey: String?) {
+        if let key = coalescingKey {
+            for index in entries.indices.reversed() {
+                guard entries[index].coalescingKey != nil else { break }
+                if entries[index].coalescingKey == key {
+                    entries.remove(at: index)
+                    break
+                }
+            }
+        }
+        entries.append(Entry(text: text, coalescingKey: coalescingKey))
+    }
+
+    mutating func dequeue() -> Entry? {
+        guard !entries.isEmpty else { return nil }
+        return entries.removeFirst()
+    }
+
+    mutating func clear() { entries.removeAll() }
+}
+
 // MARK: - Diagnostics
 
 /// Development-only logging. Enable with the toggle on the Native Controls screen

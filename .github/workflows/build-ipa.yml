@@ -171,6 +171,13 @@ jobs:
           print(f"App target: {target_name} (ID {target_id}), product: {product_name}.app")
           PY
 
+      - name: Run deterministic remote-control regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc "$SWIFT_SOURCE_DIR/RemoteControlModels.swift" "$GITHUB_WORKSPACE/tests/RemoteControlRegression.swift" -o "$RUNNER_TEMP/remote-regression-tests"
+          "$RUNNER_TEMP/remote-regression-tests"
+
       - name: Validate Swift syntax
         shell: bash
         run: |

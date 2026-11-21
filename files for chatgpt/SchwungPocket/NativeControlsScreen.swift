@@ -1113,9 +1113,7 @@ struct NativeControlsScreen: View {
     }
 
     private func parameterBank(_ visible: [RemoteParameter]) -> some View {
-        let knobs = visible.filter { $0.kind == .knob }
-        let others = visible.filter { $0.kind != .knob }
-        return PocketCard {
+        PocketCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -1136,12 +1134,18 @@ struct NativeControlsScreen: View {
                         .padding(.vertical, 5)
                         .background(Theme.success.opacity(0.10), in: Capsule())
                 }
-                if !knobs.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8, alignment: .top)], alignment: .center, spacing: 14) {
-                        ForEach(knobs) { parameter in knob(for: parameter) }
+
+                // Preserve the sequence Schwung supplies, including enums and
+                // read-only controls between consecutive runs of rotary knobs.
+                ForEach(Array(RemoteParameterLayout.groups(visible).enumerated()), id: \.offset) { _, group in
+                    if group.first?.kind == .knob {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8, alignment: .top)], alignment: .center, spacing: 14) {
+                            ForEach(group) { parameter in knob(for: parameter) }
+                        }
+                    } else if let parameter = group.first {
+                        ParameterRow(parameter: parameter, remote: remote)
                     }
                 }
-                ForEach(others) { parameter in ParameterRow(parameter: parameter, remote: remote) }
             }
         }
     }
@@ -1158,6 +1162,11 @@ struct NativeControlsScreen: View {
             },
             onChange: { remote.setNumeric($0, for: parameter) }
         )
+        .onDisappear {
+            // A gesture can be interrupted when its page or module disappears.
+            // Don't leave its key permanently shielded from device updates.
+            remote.endEditing(parameter)
+        }
     }
 }
 
