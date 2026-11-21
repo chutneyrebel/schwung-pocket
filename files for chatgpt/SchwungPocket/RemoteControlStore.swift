@@ -71,6 +71,7 @@ final class RemoteControlStore: ObservableObject {
     private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
     private var toolRefreshTask: Task<Void, Never>?
+    private var masterFXRefreshTask: Task<Void, Never>?
     private var connectionGeneration = 0
     private var selectionGeneration = 0
     private var retryAttempt = 0
@@ -250,6 +251,8 @@ final class RemoteControlStore: ObservableObject {
         receiveTask = nil
         pendingSendTask?.cancel()
         pendingSendTask = nil
+        masterFXRefreshTask?.cancel()
+        masterFXRefreshTask = nil
         pendingMessages.clear()
         gestureWrites.clear()
         valueReconciler.clear()
@@ -423,6 +426,8 @@ final class RemoteControlStore: ObservableObject {
     /// Drops everything shown for the previous selection so stale values never look current.
     private func clearPresentedData() {
         selectionGeneration += 1
+        masterFXRefreshTask?.cancel()
+        masterFXRefreshTask = nil
         loadTimeoutTask?.cancel()
         instrumentName = ""
         componentNames = [:]
@@ -859,9 +864,19 @@ final class RemoteControlStore: ObservableObject {
     /// fresh listing as a fallback so the UI also recovers if a notification is
     /// delayed or missed.
     private func refreshMasterFXAfterModuleAction() {
-        Task { [weak self] in
+        // A newer module action supersedes the previous delayed refresh.
+        // A task from the old socket or previous editor selection must never
+        // resubscribe the replacement connection after navigation.
+        masterFXRefreshTask?.cancel()
+        let socketGeneration = connectionGeneration
+        let editorGeneration = selectionGeneration
+        masterFXRefreshTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)
-            guard let self, self.isConnected, case .masterFX = self.wireTarget else { return }
+            guard let self, !Task.isCancelled,
+                  socketGeneration == self.connectionGeneration,
+                  editorGeneration == self.selectionGeneration,
+                  self.isConnected, case .masterFX = self.wireTarget else { return }
+            self.masterFXRefreshTask = nil
             self.send(["type": "subscribe_master_fx"])
         }
     }
