@@ -63,6 +63,7 @@ final class RemoteControlStore: ObservableObject {
     private var address = ""
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var pendingSendTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var moduleCatalogTask: Task<Void, Never>?
     private var loadTimeoutTask: Task<Void, Never>?
@@ -175,7 +176,12 @@ final class RemoteControlStore: ObservableObject {
     func connectIfNeeded(address newAddress: String) {
         let requestedAddress = newAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let currentAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard connection == .disconnected || requestedAddress != currentAddress else { return }
+        let canRetry: Bool
+        switch connection {
+        case .disconnected, .failed: canRetry = true
+        case .connecting, .connected, .reconnecting: canRetry = false
+        }
+        guard canRetry || requestedAddress != currentAddress else { return }
         connect(address: requestedAddress)
     }
 
@@ -246,6 +252,8 @@ final class RemoteControlStore: ObservableObject {
         connectionGeneration += 1
         receiveTask?.cancel()
         receiveTask = nil
+        pendingSendTask?.cancel()
+        pendingSendTask = nil
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
     }
@@ -1080,10 +1088,12 @@ final class RemoteControlStore: ObservableObject {
         guard let task = socket else { return }
         let generation = connectionGeneration
         let text = Self.jsonString(message)
-        Task { [weak self] in
-            // Sending is asynchronous. A disconnect or reconnect may invalidate
-            // this socket before the task runs; never write queued controls to it.
-            guard let self, self.isCurrentGeneration(generation) else { return }
+        // Chain sends to preserve the order of rapid knob changes and module
+        // commands. The socket generation guard drops work from old connections.
+        let previous = pendingSendTask
+        pendingSendTask = Task { [weak self] in
+            await previous?.value
+            guard !Task.isCancelled, let self, self.isCurrentGeneration(generation) else { return }
             do { try await task.send(.string(text)) }
             catch {
                 guard self.isCurrentGeneration(generation) else { return }
