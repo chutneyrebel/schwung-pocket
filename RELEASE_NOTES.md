@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Signal Chain interaction design
+
+**Build gate:** Build #373 for commit `ccccab3` passed prior to these changes.
+
+**What:** Signal Chain now groups components into three readable stages: MIDI FX, Instrument and Audio FX, with directional flow markers between stages. Position counts come from the existing reported capacities (and legacy fallbacks), not a newly assumed fixed chain. Each card clearly indicates EDIT PARAMETERS or ADD MODULE as its primary action. The selected position is shown beside the contextual Add/Swap control. Master FX has distinct stage guidance, explicit active/bypassed/empty/offline status, and an Add/Swap label based on the selected position.
+
+**How:** Introduced a presentation-only `SignalChainStage` enum and `chainComponents(in:)` filter in `NativeControlsScreen.swift`. Existing individual component IDs, `RemoteControlStore` metadata, selection handlers, `ModuleSwapSheet`, bypass, and destructive clear behavior are unchanged. Reorganized the SwiftUI card grid into stage groups while keeping the existing two-column layout for each group. Master FX status reuses the same connection-aware label helper as slot components.
+
+**Why:** A signal chain should convey order of operations, not look like an unstructured list. Explicit primary actions distinguish navigating to parameters from bypassing or removing a module. They also reduce ambiguity for empty positions and Master FX.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** Stage group appearance and accessibility still need device-width verification. Module picker compatibility, Master FX commands and actual on-Move effects are unverified in this pass. The status helper currently treats connected missing module names as empty; unknown partial metadata still requires separate confidence handling before release. No change to remote protocol, mixer, parameter writes, or DSP.
+
+**Verification:** GitHub Actions regression, Swift syntax, Xcode project inspection and unsigned iOS build. Physical testing is deferred at user request and remains part of the next combined Phases 1–5/M1.18–M1.24 test. No merge to main.
+
 ## v0.9 Hybrid Workspace · Creative workflow shortcuts
 
 **Build gate:** Build #372 from `423a6d4` was still running when this change began; earlier syntax and regression stages had passed. This entry records new work independently of that build's final outcome.

@@ -30,6 +30,34 @@ private struct SchwungChainComponent: Identifiable, Hashable {
     }
 }
 
+/// Visual signal-flow stages, never a replacement for Schwung's actual
+/// component identifiers or reported position capacities.
+private enum SignalChainStage: String, CaseIterable, Identifiable {
+    case midi, instrument, audio
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .midi: return "MIDI FX"
+        case .instrument: return "INSTRUMENT"
+        case .audio: return "AUDIO FX"
+        }
+    }
+    var subtitle: String {
+        switch self {
+        case .midi: return "Before the instrument"
+        case .instrument: return "Sound generator"
+        case .audio: return "After the instrument"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .midi: return "pianokeys"
+        case .instrument: return "waveform"
+        case .audio: return "slider.horizontal.3"
+        }
+    }
+}
+
 private enum TrollerSection: String, CaseIterable, Identifiable {
     case connection, mixer, signalChain, parameters, slotSettings
     var id: String { rawValue }
@@ -746,6 +774,14 @@ struct NativeControlsScreen: View {
         + (1...max(remote.audioFXCapacity, 1)).map { .audioFX($0) }
     }
 
+    private func chainComponents(in stage: SignalChainStage) -> [SchwungChainComponent] {
+        switch stage {
+        case .midi: return chainComponents.filter { $0.rawValue.hasPrefix("midi_fx") }
+        case .instrument: return chainComponents.filter { $0 == .instrument }
+        case .audio: return chainComponents.filter { $0.rawValue.hasPrefix("fx") }
+        }
+    }
+
     /// Do not imply a disconnected Move has confirmed empty positions.
     private func chainPositionStatus(_ component: String, moduleName: String?) -> String {
         guard remote.isConnected else { return "OFFLINE" }
@@ -762,27 +798,63 @@ struct NativeControlsScreen: View {
     private var slotChainCard: some View {
         PocketCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("SLOT SIGNAL CHAIN")
-                    .font(.system(size: 10, weight: .heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(Theme.muted)
-                HStack(alignment: .center, spacing: 10) {
-                    Text("MIDI FX → Instrument → Audio FX")
-                        .font(.system(size: 12, weight: .medium))
+                HStack(spacing: 8) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .foregroundStyle(Theme.accent)
+                    Text("SIGNAL PATH")
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.3)
                         .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Text(remote.destination.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                Text("Tap a loaded module to edit it, or an empty position to add one. Bypass and Clear remain independent actions.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Text("SELECTED: \(selectedChainComponent.title.uppercased())")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Spacer(minLength: 4)
                     Button {
                         openModulePicker(for: selectedChainComponent)
                     } label: {
                         Label(remote.componentNames[selectedChainComponent.rawValue] == nil ? "Add" : "Swap",
-                              systemImage: "arrow.left.arrow.right")
+                              systemImage: remote.componentNames[selectedChainComponent.rawValue] == nil ? "plus" : "arrow.left.arrow.right")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .buttonStyle(StudioSecondaryButton())
                     .disabled(!remote.isConnected)
+                    .accessibilityLabel("Add or swap module at \(selectedChainComponent.title)")
                 }
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
-                    ForEach(chainComponents) { component in
+                ForEach(SignalChainStage.allCases) { stage in
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack(spacing: 8) {
+                            Image(systemName: stage.symbol)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 21)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(stage.title)
+                                    .font(.system(size: 11, weight: .heavy))
+                                    .tracking(1)
+                                    .foregroundStyle(.white)
+                                Text(stage.subtitle)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Theme.muted)
+                            }
+                            Spacer()
+                            Text("\(chainComponents(in: stage).count) POSITION\(chainComponents(in: stage).count == 1 ? "" : "S")")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(Theme.muted)
+                        }
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 7), GridItem(.flexible(), spacing: 7)], spacing: 7) {
+                            ForEach(chainComponents(in: stage)) { component in
                         let selected = selectedChainComponent == component
                         let moduleName = remote.componentNames[component.rawValue]
                         VStack(alignment: .leading, spacing: 7) {
@@ -820,6 +892,11 @@ struct NativeControlsScreen: View {
                                             .tracking(0.7)
                                     }
                                     .foregroundStyle(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(component.rawValue) ? Theme.warning : Theme.success))
+                                    Text(moduleName == nil
+                                         ? (remote.isConnected ? "ADD MODULE" : "NOT CONNECTED")
+                                         : "EDIT PARAMETERS")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(moduleName == nil ? Theme.muted : Theme.accent)
                                 }
                                 .foregroundStyle(Color.white)
                                 .frame(maxWidth: .infinity, minHeight: 39, alignment: .leading)
@@ -877,10 +954,20 @@ struct NativeControlsScreen: View {
                         }
                         .animation(.easeOut(duration: 0.16), value: selected)
                         .accessibilityElement(children: .contain)
+                            }
+                        }
+                    }
+                    if stage != .audio {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "arrow.down")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.muted.opacity(0.75))
+                            Spacer()
+                        }
+                        .accessibilityHidden(true)
                     }
                 }
-
-
             }
         }
     }
@@ -1167,16 +1254,21 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.4)
                     .foregroundStyle(Theme.muted)
-                HStack(alignment: .center, spacing: 10) {
-                    Text("Select a loaded master-bus effect to inspect its live parameters.")
-                        .font(.system(size: 12, weight: .medium))
+                Text("Master-bus processing. Select a loaded effect to edit its parameters, or an empty position to add one.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Text(remote.selectedMasterFXComponent.replacingOccurrences(of: "master_fx:", with: "").uppercased())
+                        .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(Theme.muted)
                     Spacer(minLength: 4)
                     Button {
                         remote.loadSlotModules(address: device.addressText)
                         showingModulePicker = true
                     } label: {
-                        Label("Swap", systemImage: "arrow.left.arrow.right")
+                        Label(remote.componentNames[remote.selectedMasterFXComponent] == nil ? "Add" : "Swap",
+                              systemImage: remote.componentNames[remote.selectedMasterFXComponent] == nil ? "plus" : "arrow.left.arrow.right")
                             .font(.system(size: 11, weight: .bold))
                     }
                     .buttonStyle(StudioSecondaryButton())
@@ -1217,6 +1309,9 @@ struct NativeControlsScreen: View {
                                         .font(.system(size: 10, weight: .medium))
                                         .lineLimit(1)
                                         .foregroundStyle(Theme.muted)
+                                    Text(chainPositionStatus(key, moduleName: moduleName))
+                                        .font(.system(size: 9, weight: .heavy))
+                                        .foregroundStyle(moduleName == nil ? Theme.muted : (remote.isComponentBypassed(key) ? Theme.warning : Theme.success))
                                 }
                                 .foregroundStyle(Color.white)
                                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
@@ -1246,7 +1341,8 @@ struct NativeControlsScreen: View {
                 }
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? "MODULE BYPASSED" : "MODULE ACTIVE")
+                        Text(chainPositionStatus(remote.selectedMasterFXComponent,
+                                                moduleName: remote.componentNames[remote.selectedMasterFXComponent]))
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1)
                             .foregroundStyle(remote.isComponentBypassed(remote.selectedMasterFXComponent) ? Theme.warning : Theme.success)
