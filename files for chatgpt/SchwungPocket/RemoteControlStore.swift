@@ -115,7 +115,7 @@ final class RemoteControlStore: ObservableObject {
     /// Parameters for the selected hierarchy level, preserving Schwung's declared order.
     var visibleParameters: [RemoteParameter] {
         guard let level = levels.first(where: { $0.id == selectedLevelID }) else {
-            return parameters.sorted(by: parameterDisplayOrder)
+            return parameters
         }
 
         var ordered: [RemoteParameter] = []
@@ -128,7 +128,7 @@ final class RemoteControlStore: ObservableObject {
 
         // Before a hierarchy arrives, retain the useful flat parameter view.
         if levels.isEmpty || (selectedLevelID == "root" && levels.count == 1 && ordered.isEmpty) {
-            return parameters.sorted(by: parameterDisplayOrder)
+            return parameters
         }
         return ordered
     }
@@ -147,22 +147,13 @@ final class RemoteControlStore: ObservableObject {
         let referencedKeys = Set(baseLevels.flatMap(\.parameterKeys))
         let unassigned = parameters
             .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
-            .sorted(by: parameterDisplayOrder)
             .map(\.wireKey)
 
         levels = baseLevels
         if !unassigned.isEmpty {
             levels.append(RemoteLevel(id: "other", name: "Other", parameterKeys: unassigned))
         }
-        levels.sort { left, right in
-            if left.id == "root" { return right.id != "root" }
-            if right.id == "root" { return false }
-            if left.id == "other" { return false }
-            if right.id == "other" { return true }
-            let comparison = left.name.localizedCaseInsensitiveCompare(right.name)
-            if comparison != .orderedSame { return comparison == .orderedAscending }
-            return left.id < right.id
-        }
+        // Keep the order from the module hierarchy; Other stays last.
         if !levels.contains(where: { $0.id == selectedLevelID }) {
             selectedLevelID = levels.first?.id ?? "root"
         }
@@ -361,12 +352,8 @@ final class RemoteControlStore: ObservableObject {
 
         destination = newDestination
         clearPresentedData()
-        // Schwung currently subscribes only to the selected slot. Cached data
-        // for other slots cannot be treated as live after a destination switch.
-        // Clear the mixer tiles until the selected destination reports again.
-        slotMixStates = [:]
-        slotInstrumentNames = [:]
-        slotModuleStatuses = [:]
+        // Keep mixer snapshots while navigating the parameter editor.
+        // Disconnect invalidates them in clearLiveConnectionState().
         switch wireTarget {
         case .unverified(let reason):
             loadState = .unsupported(reason)
@@ -1558,25 +1545,29 @@ final class RemoteControlStore: ObservableObject {
             return
         }
 
-        var found: [RemoteLevel] = []
-        for (id, value) in rawLevels {
-            guard let item = value as? [String: Any] else { continue }
-            let name = item["name"] as? String ?? id.capitalized
-            let keys: [String] = (item["params"] as? [Any] ?? []).compactMap { entry in
-                if let string = entry as? String { return string }
-                if let dict = entry as? [String: Any] { return dict["key"] as? String }
-                return nil
-            }
-            found.append(RemoteLevel(id: id, name: name, parameterKeys: keys))
-        }
-        found.sort { left, right in
+        // Dictionary iteration order is not module page order. Prefer an
+        // explicit page position, then natural numeric IDs, never page names.
+        let orderedEntries = rawLevels.compactMap { id, value -> (id: String, item: [String: Any], position: Int?)? in
+            guard let item = value as? [String: Any] else { return nil }
+            let position = (item["order"] as? Int) ?? (item["index"] as? Int)
+                ?? (item["position"] as? Int)
+            return (id, item, position)
+        }.sorted { left, right in
             if left.id == "root" { return right.id != "root" }
             if right.id == "root" { return false }
-            let comparison = left.name.localizedCaseInsensitiveCompare(right.name)
-            if comparison != .orderedSame { return comparison == .orderedAscending }
-            return left.id < right.id
+            if let a = left.position, let b = right.position, a != b { return a < b }
+            if left.position != nil && right.position == nil { return true }
+            if left.position == nil && right.position != nil { return false }
+            return left.id.compare(right.id, options: [.numeric, .caseInsensitive]) == .orderedAscending
         }
-        levels = found
+        levels = orderedEntries.map { entry in
+            let keys: [String] = (entry.item["params"] as? [Any] ?? []).compactMap { value in
+                if let string = value as? String { return string }
+                if let dict = value as? [String: Any] { return dict["key"] as? String }
+                return nil
+            }
+            return RemoteLevel(id: entry.id, name: entry.item["name"] as? String ?? entry.id.capitalized, parameterKeys: keys)
+        }
         refreshOtherLevel()
         if !levels.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = levels.first?.id ?? "root" }
     }
