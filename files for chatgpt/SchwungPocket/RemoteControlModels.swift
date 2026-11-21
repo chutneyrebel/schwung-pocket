@@ -391,6 +391,42 @@ enum RemoteHierarchyLayout {
 }
 
 
+
+// MARK: - Final gesture write tracking
+
+/// A control's final drag update may be lost while earlier absolute-value
+/// writes are in flight. Send one final idempotent value at gesture completion.
+/// A touch with no changed value never generates a write.
+struct RemoteGestureWrites {
+    private var editing = Set<String>()
+    private var changed: [String: String] = [:]
+
+    mutating func begin(_ key: String) {
+        editing.insert(key)
+        changed.removeValue(forKey: key)
+    }
+
+    mutating func changedValue(_ value: String, for key: String) {
+        guard editing.contains(key) else { return }
+        changed[key] = value
+    }
+
+    mutating func end(_ key: String) -> String? {
+        guard editing.remove(key) != nil else { return nil }
+        return changed.removeValue(forKey: key)
+    }
+
+    mutating func clear(prefix: String) {
+        editing = Set(editing.filter { !$0.hasPrefix(prefix) })
+        changed = changed.filter { !$0.key.hasPrefix(prefix) }
+    }
+
+    mutating func clear() {
+        editing.removeAll()
+        changed.removeAll()
+    }
+}
+
 // MARK: - In-flight value reconciliation
 
 /// A socket send is not a device acknowledgement. Keep an optimistic value

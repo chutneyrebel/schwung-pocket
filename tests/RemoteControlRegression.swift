@@ -108,6 +108,27 @@ struct RemoteControlRegression {
         reconcile.clear()
         check(reconcile.pending.isEmpty, "disconnect drops optimistic pending state")
 
-        print("PASS: remote queue, hierarchy and delayed-echo reconciliation")
+        // An interrupted or finished drag commits at most one final value.
+        var gesture = RemoteGestureWrites()
+        gesture.begin("synth:cutoff")
+        check(gesture.end("synth:cutoff") == nil, "touch with no movement must not emit a final value")
+        gesture.begin("synth:cutoff")
+        gesture.changedValue("0.20", for: "synth:cutoff")
+        gesture.changedValue("0.85", for: "synth:cutoff")
+        check(gesture.end("synth:cutoff") == "0.85", "gesture completion must use last absolute value")
+        check(gesture.end("synth:cutoff") == nil, "interrupted view cleanup must not duplicate final writes")
+        gesture.begin("synth:drive")
+        gesture.changedValue("0.6", for: "synth:drive")
+        gesture.begin("fx1:mix")
+        gesture.changedValue("0.4", for: "fx1:mix")
+        gesture.clear(prefix: "synth:")
+        check(gesture.end("synth:drive") == nil, "module swap drops abandoned gesture")
+        check(gesture.end("fx1:mix") == "0.4", "module cleanup retains other component gestures")
+        gesture.begin("synth:cutoff")
+        gesture.changedValue("0.9", for: "synth:cutoff")
+        gesture.clear()
+        check(gesture.end("synth:cutoff") == nil, "disconnect clears gesture writes")
+
+        print("PASS: remote queue, hierarchy, reconciliation and gesture finalization")
     }
 }

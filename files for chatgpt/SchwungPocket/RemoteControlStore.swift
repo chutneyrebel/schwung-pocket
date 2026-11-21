@@ -77,6 +77,7 @@ final class RemoteControlStore: ObservableObject {
     private var wantsConnection = false
     private var resumeAfterBackground = false
     private var editingKeys = Set<String>()
+    private var gestureWrites = RemoteGestureWrites()
     private var lastSent: [String: String] = [:]
     private var valueReconciler = RemoteValueReconciler()
     private var pendingMasterFXClears: [String: Date] = [:]
@@ -250,6 +251,7 @@ final class RemoteControlStore: ObservableObject {
         pendingSendTask?.cancel()
         pendingSendTask = nil
         pendingMessages.clear()
+        gestureWrites.clear()
         valueReconciler.clear()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
@@ -434,6 +436,7 @@ final class RemoteControlStore: ObservableObject {
         values = [:]
         selectedLevelID = "root"
         editingKeys.removeAll()
+        gestureWrites.clear()
         lastSent.removeAll()
         // Destination metadata is invalidated, but mixer faders remain live
         // across page switches. Keep their short-lived echo protection.
@@ -628,6 +631,7 @@ final class RemoteControlStore: ObservableObject {
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
+        gestureWrites.clear(prefix: component + ":")
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": module.id])
         RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
@@ -649,6 +653,7 @@ final class RemoteControlStore: ObservableObject {
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
+        gestureWrites.clear(prefix: component + ":")
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": "none"])
         RemoteDiagnostics.log("Requested module clear: slot=\(slot) component=\(component)")
@@ -888,6 +893,7 @@ final class RemoteControlStore: ObservableObject {
         // Forget that editing state so the replacement module can receive fresh
         // parameter updates instead of silently skipping matching wire keys.
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
+        gestureWrites.clear(prefix: component + ":")
         switch wireTarget {
         case .slot(let slot): valueReconciler.clear(prefix: "slot:\(slot):\(component):")
         case .masterFX: valueReconciler.clear(prefix: "masterFX:\(component):")
@@ -898,8 +904,31 @@ final class RemoteControlStore: ObservableObject {
 
     // MARK: Parameter intents
 
-    func beginEditing(_ parameter: RemoteParameter) { editingKeys.insert(parameter.wireKey) }
-    func endEditing(_ parameter: RemoteParameter) { editingKeys.remove(parameter.wireKey) }
+    func beginEditing(_ parameter: RemoteParameter) {
+        editingKeys.insert(parameter.wireKey)
+        gestureWrites.begin(parameter.wireKey)
+    }
+
+    func endEditing(_ parameter: RemoteParameter) {
+        editingKeys.remove(parameter.wireKey)
+        guard let finalValue = gestureWrites.end(parameter.wireKey), isConnected else { return }
+        // The knob can disappear during a module swap. Only complete a
+        // gesture for a parameter still owned by the selected editor.
+        guard parameters.contains(where: { $0.wireKey == parameter.wireKey }) else { return }
+        switch wireTarget {
+        case .slot(let slot):
+            valueReconciler.wrote(finalValue, key: "slot:\(slot):\(parameter.wireKey)",
+                                  at: ProcessInfo.processInfo.systemUptime)
+            send(["type": "set_param", "slot": slot,
+                  "key": parameter.wireKey, "value": finalValue])
+        case .masterFX:
+            valueReconciler.wrote(finalValue, key: "masterFX:\(parameter.wireKey)",
+                                  at: ProcessInfo.processInfo.systemUptime)
+            send(["type": "set_master_fx_param",
+                  "key": parameter.wireKey, "value": finalValue])
+        case .tool, .unverified: break
+        }
+    }
 
     func currentDouble(for parameter: RemoteParameter) -> Double {
         let raw = values[parameter.wireKey] ?? values[parameter.key]
@@ -1080,12 +1109,14 @@ final class RemoteControlStore: ObservableObject {
             guard lastSent[parameter.wireKey] != text else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
+            gestureWrites.changedValue(text, for: parameter.wireKey)
             valueReconciler.wrote(text, key: "slot:\(slot):\(parameter.wireKey)", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
         case .masterFX:
             guard lastSent[parameter.wireKey] != text else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
+            gestureWrites.changedValue(text, for: parameter.wireKey)
             valueReconciler.wrote(text, key: "masterFX:\(parameter.wireKey)", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_master_fx_param", "key": parameter.wireKey, "value": text])
         case .tool, .unverified:
@@ -1323,6 +1354,7 @@ final class RemoteControlStore: ObservableObject {
             values = [:]
             lastSent = [:]
             editingKeys.removeAll()
+            gestureWrites.clear()
         }
 
         // tool_info confirms that the Tool protocol responded. Its live state
