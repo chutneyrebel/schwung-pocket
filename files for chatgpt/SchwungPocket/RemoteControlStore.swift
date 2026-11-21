@@ -1473,15 +1473,14 @@ final class RemoteControlStore: ObservableObject {
         // screen remains open. Drop parameter metadata and cached values for any
         // position whose module changed or was removed; otherwise controls from
         // the previous effect can briefly remain visible or be written to it.
-        let previousNames = componentNames
-        let changedComponents = Set(previousNames.keys).union(names.keys).filter {
-            previousNames[$0] != names[$0]
-        }
+        let changedComponents = RemoteChainChangePolicy.changedComponents(
+            previous: componentNames, current: names
+        )
         for component in changedComponents {
-            parameters.removeAll { $0.component == component }
-            values = values.filter { !$0.key.hasPrefix(component + ":") }
-            lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
-            customComponentUIURLs.removeValue(forKey: component)
+            // Direct hardware swaps need the same full invalidation as an
+            // app-initiated swap: retire knob gestures, pending device echoes
+            // and unsent values for the old effect, not just its visual cards.
+            clearComponentPresentation(component)
         }
 
         componentNames = names
@@ -1700,10 +1699,9 @@ final class RemoteControlStore: ObservableObject {
         // slot_info is the authoritative chain listing. Remove stale controls
         // as soon as a component changes or disappears, rather than waiting for
         // a later page refresh or parameter response.
-        let previousNames = componentNames
-        let changedComponents = Set(previousNames.keys).union(names.keys).filter {
-            previousNames[$0] != names[$0]
-        }
+        let changedComponents = RemoteChainChangePolicy.changedComponents(
+            previous: componentNames, current: names
+        )
         for component in changedComponents {
             clearComponentPresentation(component)
         }

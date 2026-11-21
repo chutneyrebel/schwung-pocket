@@ -176,6 +176,27 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // Repeated identical chain snapshots must preserve an active knob,
+        // while direct hardware replacement/removal invalidates the old editor.
+        let previousChain = ["master_fx:fx1": "Reverb A",
+                             "master_fx:fx2": "Delay B"]
+        check(RemoteChainChangePolicy.changedComponents(
+              previous: previousChain, current: previousChain).isEmpty,
+              "unchanged chain snapshots must preserve editor gestures")
+        let changedChain = ["master_fx:fx1": "Reverb C",
+                            "master_fx:fx3": "Filter D"]
+        check(RemoteChainChangePolicy.changedComponents(
+              previous: previousChain, current: changedChain)
+              == ["master_fx:fx1", "master_fx:fx2", "master_fx:fx3"],
+              "replacement, removal and addition invalidate only affected positions")
+        check(RemoteChainChangePolicy.changedComponents(
+              previous: ["synth": "Instrument A", "fx1": "Echo"],
+              current: ["synth": "Instrument A", "fx1": "Delay"])
+              == ["fx1"], "unrelated instrument editor remains stable")
+        check(RemoteChainChangePolicy.changedComponents(
+              previous: [:], current: [:]).isEmpty,
+              "empty chain snapshots must not invalidate controls")
+
         // DSP path lookups for Master FX must be owned by the current action,
         // connection and editor. A clear/new swap invalidates the old token.
         func masterFXEligible(_ activeToken: Int?, socket: Int = 3,
@@ -235,6 +256,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

@@ -403,6 +403,20 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Device-authoritative chain changes
+
+/// A changed, added, or removed module invalidates its old parameter editor.
+/// Unchanged component identities must not reset active knob gestures when
+/// Schwung republishes an identical chain listing.
+enum RemoteChainChangePolicy {
+    static func changedComponents(previous: [String: String],
+                                  current: [String: String]) -> [String] {
+        Set(previous.keys).union(current.keys)
+            .filter { previous[$0] != current[$0] }
+            .sorted()
+    }
+}
+
 // MARK: - Master FX asynchronous module resolution
 
 /// An HTTP lookup may complete after the user clears/replaces the same FX,

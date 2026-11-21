@@ -14,6 +14,14 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## M1.20: Full parameter cleanup on hardware-driven FX changes
+
+- Uses a shared deterministic change detector for slot and Master FX chain listings; unchanged device rebroadcasts do not reset controls.
+- When a Master FX module is changed or removed directly on Move, the native editor now clears old parameter metadata, values, editing gestures, unconfirmed echoes, custom UI references and unsent continuous writes for only that affected FX position.
+- Keeps the other Master FX positions and their current parameter state intact.
+- Added deterministic tests for unchanged listings, replacement, addition, removal, and isolation from unrelated instruments.
+- **Status:** implementation committed to v0.9; live device behavior awaits the combined hardware test checkpoint.
+
 ## Master FX asynchronous load safety
 
 - Resolved a race where a delayed installed-module DSP-path lookup could load an effect after its position had been cleared or replaced.
