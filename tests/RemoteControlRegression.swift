@@ -208,6 +208,30 @@ struct RemoteControlRegression {
         check(RemoteParameterMetadataDiff.invalidatedKeys(
             previous: [retiredDrive], incoming: []).count == 1,
             "empty new metadata retires previously known controls")
+        var exactGesture = RemoteGestureWrites()
+        exactGesture.begin("synth:cutoff")
+        exactGesture.changedValue("0.5", for: "synth:cutoff")
+        exactGesture.begin("synth:cutoff2")
+        exactGesture.changedValue("0.9", for: "synth:cutoff2")
+        exactGesture.clear(key: "synth:cutoff")
+        check(exactGesture.end("synth:cutoff") == nil &&
+              exactGesture.end("synth:cutoff2") == "0.9",
+              "metadata cleanup does not erase similarly named knob gestures")
+        var exactReconciler = RemoteValueReconciler()
+        exactReconciler.wrote("0.1", key: "slot:0:synth:cutoff", at: 10)
+        exactReconciler.wrote("0.7", key: "slot:0:synth:cutoff2", at: 10)
+        exactReconciler.clear(key: "slot:0:synth:cutoff")
+        check(exactReconciler.pending["slot:0:synth:cutoff"] == nil &&
+              exactReconciler.pending["slot:0:synth:cutoff2"] != nil,
+              "metadata cleanup preserves similarly named in-flight values")
+        queue.clear()
+        queue.enqueue("cutoff", coalescingKey: "set_param:0:synth:cutoff")
+        queue.enqueue("cutoff2", coalescingKey: "set_param:0:synth:cutoff2")
+        queue.enqueue("load", coalescingKey: nil)
+        queue.discardContinuous(key: "set_param:0:synth:cutoff")
+        check(queue.count == 2 && queue.dequeue()?.text == "cutoff2" &&
+              queue.dequeue()?.text == "load",
+              "exact queued-write cleanup preserves related parameters and load commands")
 
         // Two effects can reuse fx1:mix. A stale old parameter definition
         // must not be accepted just because its wire key still exists.

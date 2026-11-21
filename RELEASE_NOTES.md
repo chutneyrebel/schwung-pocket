@@ -19,6 +19,7 @@
 - When a current module re-advertises changed or removed parameter definitions, retires the old cached value, last-sent value, editing gesture, unconfirmed echo and queued continuous writes for those exact wire keys.
 - Leaves unchanged parameter definitions and their active values/gestures alone. New definitions do not discard parameter values that arrived ahead of metadata.
 - Applies to both normal chain components and Master FX, without introducing guessed Schwung protocol messages.
+- Retires writes by exact parameter key, preserving similarly named controls such as `cutoff2` when `cutoff` is updated.
 - Adds deterministic regression cases for changed ranges, removed controls, identical rebroadcasts and initial discovery.
 - **Status:** implemented on development branch; GitHub Actions and physical Move test remain separate verification gates.
 

@@ -1545,14 +1545,14 @@ final class RemoteControlStore: ObservableObject {
             values.removeValue(forKey: key)
             lastSent.removeValue(forKey: key)
             editingKeys.remove(key)
-            gestureWrites.clear(prefix: key)
+            gestureWrites.clear(key: key)
             switch wireTarget {
             case .slot(let slot):
-                valueReconciler.clear(prefix: "slot:\(slot):\(key)")
-                pendingMessages.discardContinuous(prefix: "set_param:\(slot):\(key)")
+                valueReconciler.clear(key: "slot:\(slot):\(key)")
+                pendingMessages.discardContinuous(key: "set_param:\(slot):\(key)")
             case .masterFX:
-                valueReconciler.clear(prefix: "masterFX:\(key)")
-                pendingMessages.discardContinuous(prefix: "set_master_fx_param:-1:\(key)")
+                valueReconciler.clear(key: "masterFX:\(key)")
+                pendingMessages.discardContinuous(key: "set_master_fx_param:-1:\(key)")
             case .tool, .unverified:
                 break
             }

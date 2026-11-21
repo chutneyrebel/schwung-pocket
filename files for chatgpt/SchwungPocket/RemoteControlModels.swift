@@ -326,6 +326,10 @@ struct RemoteOutboundQueue {
         }
     }
 
+    mutating func discardContinuous(key: String) {
+        entries.removeAll { $0.coalescingKey == key }
+    }
+
     mutating func dequeue() -> Entry? {
         guard !entries.isEmpty else { return nil }
         return entries.removeFirst()
@@ -567,6 +571,11 @@ struct RemoteGestureWrites {
         changed = changed.filter { !$0.key.hasPrefix(prefix) }
     }
 
+    mutating func clear(key: String) {
+        editing.remove(key)
+        changed.removeValue(forKey: key)
+    }
+
     mutating func clear() {
         editing.removeAll()
         changed.removeAll()
@@ -619,6 +628,10 @@ struct RemoteValueReconciler {
 
     mutating func clear(prefix: String) {
         pending = pending.filter { !$0.key.hasPrefix(prefix) }
+    }
+
+    mutating func clear(key: String) {
+        pending.removeValue(forKey: key)
     }
 
     /// Navigating between parameter editors must not discard outstanding mixer
