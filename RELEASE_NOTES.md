@@ -14,6 +14,18 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Phase 1 (navigation foundation)
+
+**What changed:** Replaced the single long SchwungTroller page with three equal workspace destinations: Perform, Chain and Design. Perform holds the connection, four-slot mixer and slot settings. Chain reuses the existing slot or Master FX module cards. Design reuses the existing parameter hierarchy and editor. Selecting an occupied slot-chain module directly opens Design, while empty positions remain on Chain for module management.
+
+**How:** Added a view-local segmented workspace selection and context header in `NativeControlsScreen.swift`. The three views reuse existing card views and retain one `RemoteControlStore`. Switching workspace does not invoke `remote.select`, reconnect or subscribe; selecting a slot still uses the existing destination selector in Perform.
+
+**Why:** Live mixing and detailed sound design should be equally accessible without scrolling through unrelated cards. Reusing the existing control bindings minimizes regressions and avoids introducing speculative protocol messages.
+
+**Known limits:** The selected module defaults to Instrument when the user changes destination, as in the previous UI. Deep per-slot module and parameter-group restoration are subsequent steps. Section-order Settings currently refers to the legacy stacked layout and will require adaptation to the new three-view workspace.
+
+**Verification:** CI can verify Swift syntax, regression tests and IPA packaging. A no-Move visual test is appropriate for view switching, module-to-Design navigation and presentation. A hardware test is **not required to continue Phase 2** because this phase adds no new wire messages; combined hardware regression remains necessary before shipping v0.9.
+
 ## M1.24: Reconcile parameter definitions after module refresh
 
 - When a current module re-advertises changed or removed parameter definitions, retires the old cached value, last-sent value, editing gesture, unconfirmed echo and queued continuous writes for those exact wire keys.

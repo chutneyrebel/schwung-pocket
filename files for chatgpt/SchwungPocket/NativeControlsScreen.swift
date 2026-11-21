@@ -53,12 +53,21 @@ private enum TrollerSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// Hybrid SchwungTroller workspace. View changes never change the live
+/// destination or trigger remote subscriptions.
+private enum TrollerWorkspace: String, CaseIterable, Identifiable {
+    case perform, chain, design
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
 struct NativeControlsScreen: View {
     @ObservedObject var device: MoveConnectionStore
     @StateObject private var remote = RemoteControlStore()
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
+    @State private var workspace: TrollerWorkspace = .perform
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
     @State private var pendingMasterFXClearComponent: String?
@@ -70,64 +79,61 @@ struct NativeControlsScreen: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
-                // Connection is the first thing on this screen; omit the redundant SchwungTroller hero header.
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(spacing: 8) {
-                        Image(systemName: TrollerSection.connection.symbol)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
-                        Text(TrollerSection.connection.title.uppercased())
-                            .font(.system(size: 10, weight: .heavy))
-                            .tracking(1.4)
-                            .foregroundStyle(Theme.muted)
-                        Spacer()
-                        Text(sectionSummary(.connection))
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Theme.muted)
-                            .lineLimit(1)
-                    }
+                workspaceSwitcher
+
+                switch workspace {
+                case .perform:
+                    // Existing mixer and connection controls retain the same
+                    // bindings and RemoteControlStore subscriptions.
                     connectionCard
-                }
-
-                destinationCard
-
-                ForEach(orderedSections.filter { $0 != .mixer && $0 != .connection }) { section in
-                    if shouldShow(section) {
+                    destinationCard
+                    if isInstrumentSlot {
                         DisclosureGroup(
                             isExpanded: Binding(
-                                get: { !collapsedSections.contains(section.rawValue) },
-                                set: { expanded in setSection(section, expanded: expanded) }
+                                get: { !collapsedSections.contains(TrollerSection.slotSettings.rawValue) },
+                                set: { setSection(.slotSettings, expanded: $0) }
                             )
                         ) {
-                            sectionContent(section)
-                                .padding(.top, 9)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            slotSettingsCard.padding(.top, 9)
                         } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: section.symbol)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Theme.accent)
-                                    .frame(width: 22)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(section.title)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                    Text(sectionSummary(section))
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(Theme.muted)
-                                        .lineLimit(1)
-                                }
-                                Spacer(minLength: 4)
-                            }
-                            .contentShape(Rectangle())
+                            Label("Slot Settings", systemImage: TrollerSection.slotSettings.symbol)
+                                .font(.system(size: 13, weight: .semibold))
                         }
                         .tint(Theme.accent)
                         .padding(13)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.055), lineWidth: 1)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    if isInstrumentSlot || isMasterFX {
+                        Button {
+                            workspace = .chain
+                        } label: {
+                            Label("Open Signal Chain", systemImage: "arrow.right")
                         }
+                        .buttonStyle(StudioSecondaryButton())
+                    }
+
+                case .chain:
+                    workspaceContextHeader
+                    if isInstrumentSlot {
+                        slotChainCard
+                    } else if isMasterFX {
+                        masterFXCard
+                    } else {
+                        messageCard(icon: "info.circle", title: "No signal chain",
+                                    text: "Select a slot or Master FX from Perform to inspect its components.")
+                    }
+
+                case .design:
+                    workspaceContextHeader
+                    if isInstrumentSlot { parameterGroupCard }
+                    contentSection
+                    if isInstrumentSlot || isMasterFX {
+                        Button {
+                            workspace = .chain
+                        } label: {
+                            Label("Back to Signal Chain", systemImage: "arrow.left")
+                        }
+                        .buttonStyle(StudioSecondaryButton())
                     }
                 }
             }
@@ -185,6 +191,44 @@ struct NativeControlsScreen: View {
             Button("Cancel", role: .cancel) { pendingMasterFXClearComponent = nil }
         } message: {
             Text("This unloads the effect from that Master FX chain position.")
+        }
+    }
+
+    private var workspaceSwitcher: some View {
+        Picker("SchwungTroller workspace", selection: $workspace) {
+            ForEach(TrollerWorkspace.allCases) { view in
+                Text(view.title).tag(view)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Workspace view")
+    }
+
+    private var workspaceContextHeader: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(remote.destination.title.uppercased())
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.muted)
+                Text(workspace == .design
+                     ? (isMasterFX
+                        ? remote.componentNames[remote.selectedMasterFXComponent] ?? "Master FX"
+                        : remote.componentNames[selectedChainComponent.rawValue] ?? selectedChainComponent.title)
+                     : "Signal Chain")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Button {
+                workspace = .perform
+            } label: {
+                Label("Mixer", systemImage: "slider.vertical.3")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(StudioSecondaryButton())
+            .accessibilityLabel("Return to Performance View")
         }
     }
 
@@ -456,6 +500,9 @@ struct NativeControlsScreen: View {
                             Button {
                                 withAnimation(.easeInOut(duration: 0.16)) {
                                     selectedChainComponent = component
+                                    if moduleName != nil {
+                                        workspace = .design
+                                    }
                                 }
                             } label: {
                                 VStack(alignment: .leading, spacing: 5) {
