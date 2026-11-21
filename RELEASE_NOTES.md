@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Creative workflow shortcuts
+
+**Build gate:** Build #372 from `423a6d4` was still running when this change began; earlier syntax and regression stages had passed. This entry records new work independently of that build's final outcome.
+
+**What:** Chain and Design now offer a compact, explicitly highlighted Slot 1–4 shortcut row. Design also offers a contextual Add or Swap action for the currently selected instrument, MIDI FX, audio FX or Master FX position. Users no longer need to return to Perform to change slots, or return to Chain simply to open the installed module picker.
+
+**How:** Added `workspaceSlotStrip` and `designModuleActions` in `NativeControlsScreen.swift`. Shortcut taps call the existing `selectWorkspaceDestination` handler, which preserves per-slot editing context and invokes the same `RemoteControlStore.select` behavior as the Performance mixer destination selector. Add/Swap invokes the existing `openModulePicker(for:)` or Master FX `ModuleSwapSheet` flow and is unavailable when disconnected. No new protocol messages, inferred device states, parameter writes or mixer controls.
+
+**Why:** Minimize navigation hops between four slots and the currently edited component, while maintaining clear selection context and familiar module actions.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** Slot strip intentionally shows slots only; the global Master FX and Tool destinations are still accessed through the Performance destination selector. Add/Swap merely opens existing module discovery, so compatibility and actual replacement remain subject to the postponed hardware regression. Layout has not been verified on a physical iPhone.
+
+**Verification and next step:** Run deterministic regressions, Swift validation, Xcode inspection and unsigned iPhone build in Actions. Hardware tests remain deferred by user request and bundled with the consolidated v0.9 testing phase. Continue visual consistency or remaining QA work after CI; do not merge `main`.
+
 ## v0.9 Hybrid Workspace · Visual polish (navigation and control density)
 
 **Build gate:** Build #371 for commit `2436b63` passed before visual refinements began.

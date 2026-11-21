@@ -125,6 +125,7 @@ struct NativeControlsScreen: View {
                     }
                 case .chain:
                     workspaceContextHeader
+                    workspaceSlotStrip
                     if isInstrumentSlot {
                         slotChainCard
                     } else if isMasterFX {
@@ -136,7 +137,9 @@ struct NativeControlsScreen: View {
 
                 case .design:
                     workspaceContextHeader
+                    workspaceSlotStrip
                     parameterStudioNavigation
+                    designModuleActions
                     if isInstrumentSlot { parameterGroupCard }
                     contentSection
                     if isInstrumentSlot || isMasterFX {
@@ -436,6 +439,85 @@ struct NativeControlsScreen: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("SchwungTroller workspace")
+    }
+
+    /// Quick slot navigation in Chain and Design. These shortcuts reuse
+    /// the destination selector's intent and its per-slot context memory.
+    /// They do not change a slot's mixer level or perform an extra refresh.
+    private var workspaceSlotStrip: some View {
+        HStack(spacing: 7) {
+            Text("SLOT")
+                .font(.system(size: 9, weight: .heavy))
+                .tracking(0.8)
+                .foregroundStyle(Theme.muted)
+            ForEach([RemoteDestination.slot1, .slot2, .slot3, .slot4], id: \.self) { slot in
+                let selected = remote.destination == slot
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        selectWorkspaceDestination(slot)
+                    }
+                } label: {
+                    Text(slot.title.replacingOccurrences(of: "Slot ", with: ""))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 32)
+                        .foregroundStyle(selected ? Color.white : Theme.muted)
+                        .background(
+                            selected ? Theme.accent.opacity(0.18) : Theme.surfaceRaised,
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(selected ? Theme.accent : Color.white.opacity(0.055),
+                                              lineWidth: selected ? 1.4 : 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Select \(slot.title)")
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+    }
+
+    /// Swap or fill the component currently open in Design, without making
+    /// the user return to Chain. Same verified catalog and sheet as Chain.
+    private var designModuleActions: some View {
+        Group {
+            if isInstrumentSlot || isMasterFX {
+                HStack(spacing: 9) {
+                    let installed = isMasterFX
+                        ? remote.componentNames[remote.selectedMasterFXComponent] != nil
+                        : remote.componentNames[selectedChainComponent.rawValue] != nil
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isMasterFX ? "MASTER FX POSITION" : selectedChainComponent.title.uppercased())
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(Theme.muted)
+                        Text(installed ? "Module loaded" : (remote.isConnected ? "Empty position" : "Connect to Move"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 4)
+                    Button {
+                        if isMasterFX {
+                            remote.loadSlotModules(address: device.addressText)
+                            showingModulePicker = true
+                        } else {
+                            openModulePicker(for: selectedChainComponent)
+                        }
+                    } label: {
+                        Label(installed ? "Swap" : "Add", systemImage: installed ? "arrow.left.arrow.right" : "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .disabled(!remote.isConnected)
+                    .accessibilityLabel(installed ? "Swap selected module" : "Add a module to selected position")
+                }
+                .padding(11)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            }
+        }
     }
 
     private var workspaceContextTitle: String {
