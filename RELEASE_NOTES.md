@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Visual polish (navigation and control density)
+
+**Build gate:** Build #371 for commit `2436b63` passed before visual refinements began.
+
+**What:** Replaced the default segmented control with a compact three-way switcher featuring distinct icons, persistent text labels, stronger selected-state borders and equal tap targets. Added a descriptive hierarchy to Chain/Design context headers so the selected destination, module and editing role are easier to distinguish. Shortened the Performance summary heading, strengthened the highlighted parameter-group state and adjusted the knob layout calculation to make better use of compact view widths. Reduced outer horizontal padding slightly to improve iPhone portrait space.
+
+**How:** These are view-local changes in `NativeControlsScreen.swift`: the switcher still reads the saved workspace order, updates the same `workspace` state and does not invoke network subscriptions. Header text is derived from existing selected component and live module metadata. The knob grid still uses the existing width measurement and `RemoteParameterLayout.groups` ordering, only recalculating how many columns fit. The rotary control gesture and wire write path are unchanged.
+
+**Why:** A three-way creative workspace needs easy-to-recognize navigation, consistent selection feedback, readable context and efficient use of limited screen width. This improves usability without changing device behavior or inventing new protocol support.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** The narrower knob-grid columns may need adjustment for unusually long value labels or large Dynamic Type; actual rendering on iPhone has not yet been inspected. Some module pages can still use existing custom/web UI and existing legacy visual styling. No claims of physical behavior verification.
+
+**Testing:** Run Swift syntax, model regression and unsigned iOS build CI. The complete Phases 1–5/M1.18–M1.24 hardware and offline visual matrix remains deferred at the user's request. No separate hardware test is necessary now, and `main` remains untouched.
+
 ## v0.9 Hybrid Workspace · Integrated UI polish (workspace preferences)
 
 **What changed:** Replaced Settings' obsolete single-page SchwungTroller section-order controls with reordering for the three actual Perform / Chain / Design views and a preferred starting workspace. The workspace switcher immediately reflects the saved order. The starting view is applied once per mounted SchwungTroller session so returning from Mirror does not unexpectedly reset user navigation. The existing Slot Settings disclosure preference remains intact.

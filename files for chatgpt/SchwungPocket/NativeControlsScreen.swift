@@ -59,6 +59,20 @@ private enum TrollerWorkspace: String, CaseIterable, Identifiable {
     case perform, chain, design
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+    var symbol: String {
+        switch self {
+        case .perform: return "slider.vertical.3"
+        case .chain: return "square.stack.3d.up"
+        case .design: return "dial.medium"
+        }
+    }
+    var accessibilityDetail: String {
+        switch self {
+        case .perform: return "Mixer and live performance"
+        case .chain: return "Installed modules and signal routing"
+        case .design: return "Instrument and effect parameters"
+        }
+    }
 }
 
 /// SchwungTroller module: destination selector + metadata-driven parameter controls.
@@ -135,7 +149,8 @@ struct NativeControlsScreen: View {
                     }
                 }
             }
-            .padding(18)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 16)
         }
         .background(Theme.background.ignoresSafeArea())
         .navigationTitle("")
@@ -271,7 +286,7 @@ struct NativeControlsScreen: View {
                 HStack(spacing: 7) {
                     Image(systemName: "waveform")
                         .foregroundStyle(Theme.accent)
-                    Text("SELECTED DESTINATION")
+                    Text("CURRENT SOUND")
                         .font(.system(size: 10, weight: .heavy))
                         .tracking(1.2)
                         .foregroundStyle(Theme.muted)
@@ -377,16 +392,65 @@ struct NativeControlsScreen: View {
         remote.selectedLevelID = groupID
     }
 
+    /// Three equal destinations with unambiguous selected-state feedback.
+    /// The labels remain visible even on a compact iPhone width.
     private var workspaceSwitcher: some View {
-        Picker("SchwungTroller workspace", selection: $workspace) {
+        HStack(spacing: 6) {
             ForEach(RemoteWorkspacePreferences.orderedViews(storedWorkspaceOrder), id: \.self) { name in
                 if let view = TrollerWorkspace(rawValue: name) {
-                    Text(view.title).tag(view)
+                    let selected = workspace == view
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            workspace = view
+                        }
+                    } label: {
+                        VStack(spacing: 5) {
+                            Image(systemName: view.symbol)
+                                .font(.system(size: 15, weight: .semibold))
+                            Text(view.title.uppercased())
+                                .font(.system(size: 10, weight: .heavy))
+                                .tracking(0.65)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .foregroundStyle(selected ? Color.white : Theme.muted)
+                        .frame(maxWidth: .infinity, minHeight: 51)
+                        .padding(.vertical, 5)
+                        .background(
+                            selected ? Theme.accent.opacity(0.15) : Theme.surface,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    selected ? Theme.accent.opacity(0.8) : Color.white.opacity(0.06),
+                                    lineWidth: selected ? 1.5 : 1
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(view.title), \(view.accessibilityDetail)")
+                    .accessibilityAddTraits(selected ? [.isSelected] : [])
                 }
             }
         }
-        .pickerStyle(.segmented)
-        .accessibilityLabel("Workspace view")
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("SchwungTroller workspace")
+    }
+
+    private var workspaceContextTitle: String {
+        if workspace == .chain { return "SIGNAL CHAIN" }
+        if isTool { return remote.instrumentName.isEmpty ? "TOOL STATE" : remote.instrumentName }
+        if isMasterFX {
+            return remote.componentNames[remote.selectedMasterFXComponent] ?? "MASTER FX"
+        }
+        return remote.componentNames[selectedChainComponent.rawValue] ?? selectedChainComponent.title
+    }
+
+    private var workspaceContextSubtitle: String {
+        if isTool { return "Live Tool information and available controls" }
+        if isMasterFX { return "MASTER FX  /  SELECTED EFFECT" }
+        return selectedChainComponent.title.uppercased() + "  /  PARAMETER STUDIO"
     }
 
     private var workspaceContextHeader: some View {
@@ -396,14 +460,18 @@ struct NativeControlsScreen: View {
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.1)
                     .foregroundStyle(Theme.muted)
-                Text(workspace == .design
-                     ? (isMasterFX
-                        ? remote.componentNames[remote.selectedMasterFXComponent] ?? "Master FX"
-                        : remote.componentNames[selectedChainComponent.rawValue] ?? selectedChainComponent.title)
-                     : "Signal Chain")
-                    .font(.system(size: 15, weight: .semibold))
+                Text(workspaceContextTitle)
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(workspace == .chain
+                     ? "MIDI FX  /  INSTRUMENT  /  AUDIO FX"
+                     : workspaceContextSubtitle)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 4)
             Button {
@@ -813,11 +881,17 @@ struct NativeControlsScreen: View {
                                                 .padding(.horizontal, 11)
                                                 .padding(.vertical, 9)
                                                 .foregroundStyle(selected ? Color.white : Theme.muted)
-                                                .background(selected ? Theme.accent.opacity(0.22) : Theme.surfaceRaised,
+                                                .background(selected ? Theme.accent.opacity(0.18) : Theme.surfaceRaised,
                                                             in: Capsule())
+                                                .overlay {
+                                                    Capsule().strokeBorder(
+                                                        selected ? Theme.accent.opacity(0.7) : Color.clear,
+                                                        lineWidth: 1
+                                                    )
+                                                }
                                         }
                                         .buttonStyle(.plain)
-                                        .accessibilityAddTraits(selected ? .isSelected : [])
+                                        .accessibilityAddTraits(selected ? [.isSelected] : [])
                                     }
                                 }
                             }
@@ -1423,7 +1497,7 @@ struct NativeControlsScreen: View {
                         LazyVGrid(
                             columns: Array(
                                 repeating: GridItem(.flexible(minimum: 0), spacing: 6, alignment: .top),
-                                count: max(2, min(8, Int(parameterStudioWidth / 78)))
+                                count: max(2, min(8, Int((parameterStudioWidth + 6) / 76)))
                             ),
                             alignment: .center,
                             spacing: 14
