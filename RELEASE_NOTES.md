@@ -14,6 +14,20 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Phase 2 (Performance View)
+
+**What changed:** Performance View now has a compact single connection/MIDI status card with Connect/Disconnect, Reload and expandable MIDI activity, the existing four-slot mixer, and a selected-destination focus card with direct Signal Chain and Design shortcuts. Tool destinations open their read-only state in Design. Removed the duplicate chain navigation button in favor of contextual actions.
+
+**How:** Added presentation-only SwiftUI helpers in `NativeControlsScreen.swift` using the existing `RemoteControlStore` and `MirrorMIDIActivityStore`. The underlying four vertical faders, 0–400% scaling, M/S controls, wire messages, and remote subscription lifecycle remain unchanged. The selected destination's name is derived from confirmed displayed metadata, not a placeholder module.
+
+**Why:** Move session essentials belong above the fold: connection, four faders and a direct path from mixing to sound design. This improves navigation without more protocol complexity or rediscovering module metadata each time a view switches.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations and next work:** UI is not yet evaluated on an actual narrow iPhone viewport; Chain and Design visual refinements are Phase 3/4. Old settings for section ordering require adapting to the new hybrid workspace. Recent connection/parameter reliability fixes still require a combined physical Move regression before release.
+
+**Verification:** Syntax, deterministic regression and unsigned iOS build are automated in GitHub Actions. **Hardware test not required to continue Phase 3.** Optional offline visual check: open Perform, inspect four faders/connection indicator, show/hide MIDI log, select slots, and follow Chain/Design shortcuts; report clipping or overlap. Do not mark live playback and hardware behavior passed based on CI.
+
 ## v0.9 Hybrid Workspace · Phase 1 (navigation foundation)
 
 **What changed:** Replaced the single long SchwungTroller page with three equal workspace destinations: Perform, Chain and Design. Perform holds the connection, four-slot mixer and slot settings. Chain reuses the existing slot or Master FX module cards. Design reuses the existing parameter hierarchy and editor. Selecting an occupied slot-chain module directly opens Design, while empty positions remain on Chain for module management.

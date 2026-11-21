@@ -85,8 +85,9 @@ struct NativeControlsScreen: View {
                 case .perform:
                     // Existing mixer and connection controls retain the same
                     // bindings and RemoteControlStore subscriptions.
-                    connectionCard
+                    performanceStatusCard
                     destinationCard
+                    performanceFocusCard
                     if isInstrumentSlot {
                         DisclosureGroup(
                             isExpanded: Binding(
@@ -103,15 +104,6 @@ struct NativeControlsScreen: View {
                         .padding(13)
                         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
                     }
-                    if isInstrumentSlot || isMasterFX {
-                        Button {
-                            workspace = .chain
-                        } label: {
-                            Label("Open Signal Chain", systemImage: "arrow.right")
-                        }
-                        .buttonStyle(StudioSecondaryButton())
-                    }
-
                 case .chain:
                     workspaceContextHeader
                     if isInstrumentSlot {
@@ -192,6 +184,141 @@ struct NativeControlsScreen: View {
         } message: {
             Text("This unloads the effect from that Master FX chain position.")
         }
+    }
+
+    /// Compact performance status: one visible connection indicator and
+    /// an expandable MIDI log. This reuses the existing connection intents.
+    private var performanceStatusCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 7) {
+                    Circle().fill(statusColor).frame(width: 8, height: 8)
+                    Text(remote.statusText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .accessibilityLabel("Move connection: \(remote.statusText)")
+                    Spacer(minLength: 4)
+                    Circle()
+                        .fill(midiActivity.events.isEmpty ? Theme.muted : Theme.success)
+                        .frame(width: 7, height: 7)
+                    Text(midiActivity.events.isEmpty ? "MIDI IDLE" : "MIDI ACTIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(midiActivity.events.isEmpty ? Theme.muted : Theme.success)
+                }
+                HStack(spacing: 8) {
+                    switch remote.connection {
+                    case .connected, .connecting, .reconnecting:
+                        Button { remote.disconnect() } label: {
+                            Label("Disconnect", systemImage: "xmark.circle")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .buttonStyle(StudioSecondaryButton())
+                    case .disconnected, .failed:
+                        Button { remote.connect(address: device.addressText) } label: {
+                            Label("Connect", systemImage: "wifi")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .buttonStyle(StudioPrimaryButton())
+                    }
+                    if remote.isConnected {
+                        Button { remote.refresh() } label: {
+                            Label("Reload", systemImage: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .buttonStyle(StudioSecondaryButton())
+                    }
+                    Spacer(minLength: 4)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            showingMIDILog.toggle()
+                        }
+                    } label: {
+                        Label(showingMIDILog ? "Hide MIDI" : "MIDI Log",
+                              systemImage: showingMIDILog ? "chevron.up" : "list.bullet")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(StudioSecondaryButton())
+                    .accessibilityLabel(showingMIDILog ? "Hide live MIDI events" : "Show live MIDI events")
+                }
+                if showingMIDILog {
+                    midiActivityContent.padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    /// A useful shortcut from mixing into sound design without forcing the
+    /// user to open the Chain view or reselect the current slot.
+    private var performanceFocusCard: some View {
+        PocketCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 7) {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(Theme.accent)
+                    Text("SELECTED DESTINATION")
+                        .font(.system(size: 10, weight: .heavy))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.muted)
+                    Spacer(minLength: 4)
+                    Text(remote.destination.title)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(performanceFocusName)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(performanceFocusDetail)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 4)
+                }
+                HStack(spacing: 8) {
+                    if isInstrumentSlot || isMasterFX {
+                        Button {
+                            workspace = .chain
+                        } label: {
+                            Label("Signal Chain", systemImage: "square.stack.3d.up")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .buttonStyle(StudioSecondaryButton())
+                    }
+                    Button {
+                        if isInstrumentSlot { selectedChainComponent = .instrument }
+                        workspace = .design
+                    } label: {
+                        Label(isTool ? "Tool State" : "Design",
+                              systemImage: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(StudioPrimaryButton())
+                }
+            }
+        }
+    }
+
+    private var performanceFocusName: String {
+        if isTool {
+            return remote.instrumentName.isEmpty ? "Tool" : remote.instrumentName
+        }
+        if isMasterFX {
+            return remote.componentNames[remote.selectedMasterFXComponent] ?? "Master FX"
+        }
+        if let installed = remote.componentNames["synth"] { return installed }
+        return remote.instrumentName.isEmpty ? "No instrument reported" : remote.instrumentName
+    }
+
+    private var performanceFocusDetail: String {
+        if !remote.isConnected { return "Connect to Move to retrieve live module information." }
+        if isTool { return "Open the Tool status and any available custom controls." }
+        if isMasterFX { return "Open Master FX modules or edit the selected effect." }
+        return "Open the instrument controls or inspect the full signal chain."
     }
 
     private var workspaceSwitcher: some View {
