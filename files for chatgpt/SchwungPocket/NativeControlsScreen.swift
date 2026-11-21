@@ -68,6 +68,7 @@ struct NativeControlsScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedChainComponent: SchwungChainComponent = .instrument
     @State private var workspace: TrollerWorkspace = .perform
+    @State private var parameterStudioWidth: CGFloat = 320
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
     @State private var pendingMasterFXClearComponent: String?
@@ -117,6 +118,7 @@ struct NativeControlsScreen: View {
 
                 case .design:
                     workspaceContextHeader
+                    parameterStudioNavigation
                     if isInstrumentSlot { parameterGroupCard }
                     contentSection
                     if isInstrumentSlot || isMasterFX {
@@ -736,28 +738,98 @@ struct NativeControlsScreen: View {
         }
     }
 
-    private var parameterGroupCard: some View {
+    /// Design can change the active component without a trip back to Chain.
+    /// The picker uses the reported chain positions; unoccupied positions are
+    /// selectable but do not invent editable controls.
+    private var parameterStudioNavigation: some View {
         Group {
-            if selectedChainComponent == .instrument && remote.levels.count > 1 {
+            if isInstrumentSlot {
                 PocketCard {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("PARAMETER GROUP")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("EDIT COMPONENT")
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1.2)
                             .foregroundStyle(Theme.muted)
-                        Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
-                            ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
+                        Picker("Component", selection: $selectedChainComponent) {
+                            ForEach(chainComponents) { component in
+                                let label = remote.componentNames[component.rawValue]
+                                Text("\(component.title) · \(label ?? "Empty")").tag(component)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.accent)
+                        .accessibilityLabel("Select module to edit")
+                    }
+                }
+            } else if isMasterFX {
+                PocketCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("EDIT MASTER FX")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(1.2)
+                            .foregroundStyle(Theme.muted)
+                        Picker("Master FX position", selection: $remote.selectedMasterFXComponent) {
+                            ForEach(1...max(remote.masterFXCapacity, 1), id: \.self) { index in
+                                let key = "master_fx:fx\(index)"
+                                Text("FX \(index) · \(remote.componentNames[key] ?? "Empty")").tag(key)
+                            }
                         }
                         .pickerStyle(.menu)
                         .tint(Theme.accent)
                     }
                 }
-            } else if selectedChainComponent != .instrument {
+            }
+        }
+    }
+
+    private var parameterGroupCard: some View {
+        Group {
+            if selectedChainComponent == .instrument && remote.levels.count > 1 {
                 PocketCard {
-                    Text("Controls for \(selectedChainComponent.title) appear below when Schwung reports editable parameters.")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("PARAMETER GROUP")
+                                .font(.system(size: 10, weight: .heavy))
+                                .tracking(1.2)
+                                .foregroundStyle(Theme.muted)
+                            Spacer()
+                            Text("\(remote.levels.count) GROUPS")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(Theme.muted)
+                        }
+                        // Quick page switching for ordinary module hierarchies;
+                        // the menu remains available for very large hierarchies.
+                        if remote.levels.count <= 8 {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 7) {
+                                    ForEach(remote.levels) { level in
+                                        let selected = remote.selectedLevelID == level.id
+                                        Button {
+                                            remote.selectedLevelID = level.id
+                                        } label: {
+                                            Text(level.name)
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .lineLimit(1)
+                                                .padding(.horizontal, 11)
+                                                .padding(.vertical, 9)
+                                                .foregroundStyle(selected ? Color.white : Theme.muted)
+                                                .background(selected ? Theme.accent.opacity(0.22) : Theme.surfaceRaised,
+                                                            in: Capsule())
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityAddTraits(selected ? .isSelected : [])
+                                    }
+                                }
+                            }
+                            .accessibilityLabel("Instrument parameter groups")
+                        } else {
+                            Picker("Instrument parameter group", selection: $remote.selectedLevelID) {
+                                ForEach(remote.levels) { level in Text(level.name).tag(level.id) }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(Theme.accent)
+                        }
+                    }
                 }
             }
         }
@@ -1323,7 +1395,7 @@ struct NativeControlsScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .center, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(selectedChainComponent.title.uppercased())
+                        Text(isMasterFX ? "MASTER FX" : (isTool ? "TOOL" : selectedChainComponent.title.uppercased()))
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1.3)
                             .foregroundStyle(Theme.accent)
@@ -1345,12 +1417,29 @@ struct NativeControlsScreen: View {
                 // read-only controls between consecutive runs of rotary knobs.
                 ForEach(Array(RemoteParameterLayout.groups(visible).enumerated()), id: \.offset) { _, group in
                     if group.first?.kind == .knob {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8, alignment: .top)], alignment: .center, spacing: 14) {
+                        LazyVGrid(
+                            columns: Array(
+                                repeating: GridItem(.flexible(minimum: 0), spacing: 6, alignment: .top),
+                                count: max(2, min(8, Int(parameterStudioWidth / 78)))
+                            ),
+                            alignment: .center,
+                            spacing: 14
+                        ) {
                             ForEach(group) { parameter in knob(for: parameter) }
                         }
                     } else if let parameter = group.first {
                         ParameterRow(parameter: parameter, remote: remote)
                     }
+                }
+            }
+            // Measure the actual card content, not the device orientation:
+            // compact portrait fits four knobs when practical and wider
+            // layouts grow toward eight without guessing a screen size.
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { parameterStudioWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { parameterStudioWidth = $0 }
                 }
             }
         }

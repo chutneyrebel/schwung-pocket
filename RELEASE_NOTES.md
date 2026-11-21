@@ -14,6 +14,20 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Phase 4 (Parameter Studio)
+
+**What:** Parameter Studio now offers direct switching between reported MIDI FX, instrument and audio FX positions, plus a Master FX position selector where appropriate. Instrument groups with eight or fewer hierarchy levels are shown as horizontally scrollable one-tap page chips; larger hierarchies retain a dropdown. Numeric knob grids respond to their actual available width, targeting four compact portrait controls and up to eight controls on wide layouts. The parameter card labels Master FX correctly.
+
+**How:** Added view-local SwiftUI component pickers and quick page buttons in `NativeControlsScreen.swift`. Both use the existing selected component and `RemoteControlStore.selectedLevelID`; no network subscriptions or new parameter write logic. The grid measures its card content width with `GeometryReader` and uses flexible columns. Existing `RemoteParameterLayout.groups` continues to preserve Schwung's declared order and non-knob controls.
+
+**Why:** Users should move between module sound-design controls without returning to Chain, and large instrument hierarchies should be navigable with one tap. Responsive layout should reflect the available editing surface, not assume a specific device model.
+
+**Files:** `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** Changing slots still resets the selected component to Instrument; full per-module/per-slot group restoration needs a dedicated state ownership pass. Displaying four compact knobs depends on the real card width and accessibility text sizes; layout must be checked on an iPhone. Module-specific custom UI parity remains dependent on the existing Schwung-provided URL/metadata. No claim of Move hardware validation.
+
+**Verification:** CI syntax/regressions/iOS packaging plus optional offline visual navigation and portrait/landscape checks. **A hardware test is not necessary to proceed to integrated workspace QA.** A combined physical test is advised before the v0.9 release candidate to validate parameter writes, module changes and reconnection after M1.18–M1.24.
+
 ## v0.9 Hybrid Workspace · Phase 3 (Signal Chain)
 
 **What:** Selecting a loaded MIDI FX, instrument, audio FX or Master FX now opens the corresponding Design view. Selecting an empty position when connected opens the existing compatible module picker. The slot toolbar identifies the action as Add or Swap based on reported membership. Disconnected positions show OFFLINE / Waiting for Move rather than being described as confirmed empty. The main module buttons have accessible actions; Bypass/Enable and destructive Clear remain separate.
