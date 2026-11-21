@@ -126,13 +126,11 @@ final class RemoteControlStore: ObservableObject {
             return parameters
         }
 
-        var ordered: [RemoteParameter] = []
-        for key in level.parameterKeys {
-            if let match = parameters.first(where: { $0.wireKey == key || $0.key == key }),
-               !ordered.contains(match) {
-                ordered.append(match)
-            }
-        }
+        // Hierarchy pages are instrument-owned. A MIDI or Audio FX may
+        // publish the same short key but must not take a synth page position.
+        let ordered = RemoteInstrumentHierarchyPolicy.orderedParameters(
+            for: level, parameters: parameters
+        )
 
         // Before a hierarchy arrives, retain the useful flat parameter view.
         if levels.isEmpty || (selectedLevelID == "root" && levels.count == 1 && ordered.isEmpty) {
@@ -152,10 +150,9 @@ final class RemoteControlStore: ObservableObject {
     private func refreshOtherLevel() {
         guard !levels.isEmpty else { return }
         let baseLevels = levels.filter { $0.id != "other" }
-        let referencedKeys = Set(baseLevels.flatMap(\.parameterKeys))
-        let unassigned = parameters
-            .filter { !referencedKeys.contains($0.key) && !referencedKeys.contains($0.wireKey) }
-            .map(\.wireKey)
+        let unassigned = RemoteInstrumentHierarchyPolicy.unassignedKeys(
+            parameters: parameters, levels: baseLevels
+        )
 
         levels = baseLevels
         if !unassigned.isEmpty {

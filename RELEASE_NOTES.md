@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Code-only integration QA · Instrument hierarchy isolation
+
+**Build gate:** Build #376 (`8d00dbf`) completed successfully before this QA pass.
+
+**What was fixed:** The instrument's generated **Other** hierarchy page previously scanned all module parameters for unassigned controls. This allowed MIDI FX and audio FX parameters from the same slot to appear as instrument-level unassigned controls. The hierarchy's ordered parameter lookup also matched by short key across every module, allowing a same-named FX parameter to occupy an instrument page position ahead of the actual synth control.
+
+**How:** Added pure `RemoteInstrumentHierarchyPolicy` helpers in `RemoteControlModels.swift` for instrument-scoped unassigned keys and ordered page controls. `RemoteControlStore.visibleParameters` and `refreshOtherLevel()` now invoke those helpers; neither module metadata parsing nor actual write commands were changed. Added regression fixtures with deliberately overlapping synth/FX keys and out-of-order module metadata.
+
+**Why:** Parameter navigation must reflect the component that owns the controls. Naming collisions across modules should never redirect the sound-design UI to another module or create misleading extra instrument pages.
+
+**Affected files:** `RemoteControlModels.swift`, `RemoteControlStore.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** The code audit does not establish behavior on a physical Move, and a module can still republish an identical identity after an in-place swap without an explicit generation field. This specific pass protects instrument hierarchy ownership, not remote protocol revision tracking or module synchronization semantics.
+
+**Verification and testing decision:** Run Swift syntax, deterministic regressions and iOS packaging via GitHub Actions. No hardware test requested. Continue batching live tests with the postponed v0.9 Phases 1–5 and M1.18–M1.24 combined hardware session. `main` remains untouched.
+
 ## v0.9 Code-only integration QA · Stable module picker target
 
 **Build gate:** GitHub Actions #375 passed (commit `7a3510f`) before this QA change.

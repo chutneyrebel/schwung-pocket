@@ -498,6 +498,34 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Instrument hierarchy ownership
+
+/// Hierarchy pages belong to the instrument, even when the selected slot
+/// also contains MIDI FX and Audio FX with independently named parameters.
+enum RemoteInstrumentHierarchyPolicy {
+    static func unassignedKeys(parameters: [RemoteParameter],
+                               levels: [RemoteLevel]) -> [String] {
+        let referenced = Set(levels.flatMap(\.parameterKeys))
+        return parameters
+            .filter { $0.component == "synth" }
+            .filter { !referenced.contains($0.key) && !referenced.contains($0.wireKey) }
+            .map(\.wireKey)
+    }
+
+    static func orderedParameters(for level: RemoteLevel,
+                                  parameters: [RemoteParameter]) -> [RemoteParameter] {
+        let instrument = parameters.filter { $0.component == "synth" }
+        var result: [RemoteParameter] = []
+        for key in level.parameterKeys {
+            if let item = instrument.first(where: { $0.wireKey == key || $0.key == key }),
+               !result.contains(item) {
+                result.append(item)
+            }
+        }
+        return result
+    }
+}
+
 // MARK: - Parameter metadata refresh reconciliation
 
 /// A module may replace one control's range/options while retaining its key.

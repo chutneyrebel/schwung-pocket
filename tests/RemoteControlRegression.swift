@@ -7,12 +7,13 @@ private func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     }
 }
 
-private func makeParameter(_ name: String, type: String) -> RemoteParameter {
+private func makeParameter(_ name: String, type: String,
+                           component: String = "synth") -> RemoteParameter {
     let item: [String: Any] = [
         "key": name, "name": name, "type": type,
         "min": 0, "max": 1, "options": ["Off", "On"]
     ]
-    guard let parameter = RemoteParameter.parse(item, component: "synth") else {
+    guard let parameter = RemoteParameter.parse(item, component: component) else {
         fatalError("Could not construct regression fixture")
     }
     return parameter
@@ -85,6 +86,32 @@ struct RemoteControlRegression {
             "page2": ["name": "Two", "params": ["a"]]
         ])
         check(legacyPages.map(\.id) == ["page2", "page10"], "unlinked pages use natural numeric order")
+
+        // A slot's instrument hierarchy must never absorb its MIDI/Audio FX
+        // parameters, even when independent modules use the same short key.
+        let mixedPages: [RemoteParameter] = [
+            makeParameter("cutoff", type: "float", component: "fx1"),
+            makeParameter("cutoff", type: "float", component: "synth"),
+            makeParameter("drive", type: "float", component: "midi_fx1"),
+            makeParameter("resonance", type: "float", component: "synth"),
+            makeParameter("mix", type: "float", component: "fx2")
+        ]
+        let filterPage = RemoteLevel(id: "filter", name: "Filter",
+                                     parameterKeys: ["cutoff"])
+        let pageControls = RemoteInstrumentHierarchyPolicy.orderedParameters(
+            for: filterPage, parameters: mixedPages
+        )
+        check(pageControls.count == 1 && pageControls[0].component == "synth",
+              "identical FX keys cannot hijack instrument hierarchy controls")
+        let extraKeys = RemoteInstrumentHierarchyPolicy.unassignedKeys(
+            parameters: mixedPages, levels: [filterPage]
+        )
+        check(extraKeys == ["synth:resonance"],
+              "instrument Other page excludes FX/MIDI FX parameters")
+        check(RemoteInstrumentHierarchyPolicy.unassignedKeys(
+            parameters: mixedPages.filter { $0.component != "synth" },
+            levels: [filterPage]).isEmpty,
+            "FX-only metadata cannot create an instrument Other page")
 
         // Delayed device echoes should not pull a recently edited knob
         // backwards, but the device must eventually become authoritative.
@@ -477,6 +504,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, stable module picker, chain certainty and clear intent, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, instrument hierarchy isolation, workspace preferences and context, stable module picker, chain certainty and clear intent, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }
