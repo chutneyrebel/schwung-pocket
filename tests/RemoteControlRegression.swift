@@ -176,6 +176,32 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // A delayed chain_params/param_update for an empty FX position must
+        // not recreate controls after a valid device listing has removed it.
+        let liveComponents = ["synth": "Drift", "fx1": "Delay"]
+        check(RemoteChainMetadataPolicy.accepts(
+              component: "fx2", knownListing: false,
+              componentNames: liveComponents),
+              "metadata can precede the initial chain listing")
+        check(!RemoteChainMetadataPolicy.accepts(
+              component: "fx2", knownListing: true,
+              componentNames: liveComponents),
+              "empty FX cannot be resurrected by delayed metadata")
+        check(RemoteChainMetadataPolicy.accepts(
+              component: "fx1", knownListing: true,
+              componentNames: liveComponents),
+              "occupied FX still accepts its parameters")
+        check(RemoteChainMetadataPolicy.moduleComponent(for: "fx2:mix") == "fx2",
+              "slot FX parameters identify their component")
+        check(RemoteChainMetadataPolicy.moduleComponent(for: "midi_fx1:rate") == "midi_fx1",
+              "MIDI effect parameters identify their component")
+        check(RemoteChainMetadataPolicy.moduleComponent(for: "master_fx:fx3:mix") == "master_fx:fx3",
+              "Master FX parameter keys preserve their two-part prefix")
+        check(RemoteChainMetadataPolicy.moduleComponent(for: "slot:volume") == nil,
+              "slot mixer values are exempt from module metadata gating")
+        check(RemoteChainMetadataPolicy.moduleComponent(for: "unknown:value") == nil,
+              "unknown keys are not guessed into a module")
+
         // Repeated identical chain snapshots must preserve an active knob,
         // while direct hardware replacement/removal invalidates the old editor.
         let previousChain = ["master_fx:fx1": "Reverb A",
@@ -256,6 +282,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

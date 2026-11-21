@@ -403,6 +403,36 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Chain metadata gating
+
+/// Parameter definitions can arrive after an effect was removed on Move.
+/// Before the first complete listing, keep discovery compatible with builds
+/// that send metadata first. Once a listing exists, its occupied component
+/// names determine which component metadata is allowed back into the editor.
+enum RemoteChainMetadataPolicy {
+    static func accepts(component: String, knownListing: Bool,
+                        componentNames: [String: String]) -> Bool {
+        !knownListing || componentNames[component] != nil
+    }
+
+    /// Slot-level settings are not a module and remain valid independently.
+    /// The Master FX keys have two component segments (master_fx:fxN).
+    static func moduleComponent(for wireKey: String) -> String? {
+        if wireKey.hasPrefix("master_fx:") {
+            let parts = wireKey.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count >= 3, parts[1].range(of: #"^fx[1-8]$"#, options: .regularExpression) != nil
+            else { return nil }
+            return "master_fx:" + String(parts[1])
+        }
+        let prefix = wireKey.split(separator: ":", maxSplits: 1).first.map(String.init) ?? ""
+        if prefix == "synth" ||
+           prefix.range(of: #"^(midi_fx|fx)[1-8]$"#, options: .regularExpression) != nil {
+            return prefix
+        }
+        return nil
+    }
+}
+
 // MARK: - Device-authoritative chain changes
 
 /// A changed, added, or removed module invalidates its old parameter editor.

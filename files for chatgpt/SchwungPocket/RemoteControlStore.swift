@@ -78,6 +78,7 @@ final class RemoteControlStore: ObservableObject {
     private var connectionGeneration = 0
     private var moduleCatalogGeneration = 0
     private var selectionGeneration = 0
+    private var activeChainListingKnown = false
     private var retryAttempt = 0
     private var wantsConnection = false
     private var resumeAfterBackground = false
@@ -446,6 +447,7 @@ final class RemoteControlStore: ObservableObject {
     /// Drops everything shown for the previous selection so stale values never look current.
     private func clearPresentedData() {
         selectionGeneration += 1
+        activeChainListingKnown = false
         invalidateMasterFXLookups()
         masterFXRefreshTask?.cancel()
         masterFXRefreshTask = nil
@@ -1484,6 +1486,7 @@ final class RemoteControlStore: ObservableObject {
         }
 
         componentNames = names
+        activeChainListingKnown = true
         if !names.keys.contains(selectedMasterFXComponent) {
             selectedMasterFXComponent = names.keys.sorted().first ?? "master_fx:fx1"
         }
@@ -1535,7 +1538,10 @@ final class RemoteControlStore: ObservableObject {
         }
         // A late chain_params response can arrive after an effect was removed
         // directly on the Move. Do not resurrect controls for an empty position.
-        guard componentNames[component] != nil else {
+        guard RemoteChainMetadataPolicy.accepts(
+            component: component, knownListing: activeChainListingKnown,
+            componentNames: componentNames
+        ) else {
             RemoteDiagnostics.log("ignored Master FX parameters for empty position \(component)")
             return
         }
@@ -1706,6 +1712,9 @@ final class RemoteControlStore: ObservableObject {
             clearComponentPresentation(component)
         }
         componentNames = names
+        // Partial/unknown sections retain their last confirmed component
+        // names; the listing can still gate metadata for empty positions.
+        activeChainListingKnown = true
         let allSectionsKnown = synthKnown && !unknownSections.contains("midi_fx") && !unknownSections.contains("fx")
         if allSectionsKnown && names.isEmpty {
             loadState = .loaded
@@ -1775,6 +1784,13 @@ final class RemoteControlStore: ObservableObject {
         case .tool, .unverified:
             return
         }
+        guard RemoteChainMetadataPolicy.accepts(
+            component: component, knownListing: activeChainListingKnown,
+            componentNames: componentNames
+        ) else {
+            RemoteDiagnostics.log("ignored delayed chain_params for empty component \(component)")
+            return
+        }
         guard let items = message["data"] as? [[String: Any]] else {
             RemoteDiagnostics.log("chain_params without array data")
             return
@@ -1797,6 +1813,13 @@ final class RemoteControlStore: ObservableObject {
         }
         var merged = values
         for (key, raw) in params {
+            // Once the device has reported the chain, stale parameter values
+            // from removed modules must not recreate editable orphan state.
+            if let component = RemoteChainMetadataPolicy.moduleComponent(for: key),
+               !RemoteChainMetadataPolicy.accepts(
+                   component: component, knownListing: activeChainListingKnown,
+                   componentNames: componentNames
+               ) { continue }
             // Never fight a knob currently being dragged.
             if editingKeys.contains(key) { continue }
             let text: String

@@ -14,6 +14,16 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## M1.21: Guard orphaned module metadata
+
+- After Schwung has supplied a chain listing, late `chain_params` responses for unoccupied synth, MIDI FX, audio FX or Master FX positions no longer repopulate the parameter editor.
+- Late module parameter-value updates from those empty positions are filtered by component identity.
+- Preserves initial discovery compatibility when metadata arrives before the first authoritative chain listing.
+- Slot mixer state is intentionally exempt from module gating; unknown keys are not guessed into effect components.
+- Regression tests cover occupied/empty components, MIDI FX, Master FX key parsing and initial-discovery behavior.
+- **Limit:** Schwung's current messages do not carry a request ID or module revision. A delayed response for a *replaced but still occupied* position cannot be conclusively attributed to the old module from key/slot alone. This change specifically prevents orphan metadata, not all same-position races.
+- **Status:** source committed; GitHub Actions and hardware validation tracked separately.
+
 ## M1.20: Full parameter cleanup on hardware-driven FX changes
 
 - Uses a shared deterministic change detector for slot and Master FX chain listings; unchanged device rebroadcasts do not reset controls.
