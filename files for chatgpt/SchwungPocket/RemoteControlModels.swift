@@ -428,6 +428,19 @@ struct RemoteValueReconciler {
         pending = pending.filter { !$0.key.hasPrefix(prefix) }
     }
 
+    /// Navigating between parameter editors must not discard outstanding mixer
+    /// writes from other slots. All other controls are page/module scoped.
+    mutating func retainMixerWrites() {
+        pending = pending.filter { key, _ in
+            let parts = key.split(separator: ":")
+            return parts.count == 4
+                && parts[0] == "slot"
+                && Int(parts[1]) != nil
+                && parts[2] == "slot"
+                && (parts[3] == "volume" || parts[3] == "muted" || parts[3] == "soloed")
+        }
+    }
+
     mutating func clear() { pending.removeAll() }
 
     private static func equivalent(_ lhs: String, _ rhs: String) -> Bool {

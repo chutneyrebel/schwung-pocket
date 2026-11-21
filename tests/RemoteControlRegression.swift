@@ -100,6 +100,11 @@ struct RemoteControlRegression {
         reconcile.wrote("0", key: "slot:1:slot:muted", at: 15.0)
         reconcile.clear(prefix: "slot:0:")
         check(reconcile.pending.count == 1, "component/slot cleanup must not clear other slots")
+        reconcile.wrote("0.75", key: "slot:2:slot:volume", at: 15.0)
+        reconcile.wrote("0.60", key: "slot:2:synth:cutoff", at: 15.0)
+        reconcile.retainMixerWrites()
+        check(reconcile.pending.count == 2, "page switches preserve mixer writes from all slots")
+        check(reconcile.pending["slot:2:synth:cutoff"] == nil, "page switches discard stale editor writes")
         reconcile.clear()
         check(reconcile.pending.isEmpty, "disconnect drops optimistic pending state")
 

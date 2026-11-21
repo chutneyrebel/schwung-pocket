@@ -435,9 +435,9 @@ final class RemoteControlStore: ObservableObject {
         selectedLevelID = "root"
         editingKeys.removeAll()
         lastSent.removeAll()
-        // Destination metadata is invalidated; preserve separate mixer
-        // reconciliation for other slots only until their grace window ends.
-        valueReconciler.clear()
+        // Destination metadata is invalidated, but mixer faders remain live
+        // across page switches. Keep their short-lived echo protection.
+        valueReconciler.retainMixerWrites()
     }
 
     /// Clear connection-scoped state, but keep the selected destination and
