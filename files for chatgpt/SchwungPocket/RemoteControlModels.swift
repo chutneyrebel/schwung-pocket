@@ -403,6 +403,19 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Active parameter write ownership
+
+/// A view may finish a drag after its module has been replaced. The wire key
+/// alone is insufficient: two unrelated FX can both publish "fx1:mix".
+/// Require the entire parameter definition to match the current editor.
+/// This is a local UI ownership check, not a claim that Schwung replies carry
+/// module revisions.
+enum RemoteParameterWritePolicy {
+    static func isCurrent(_ parameter: RemoteParameter, in active: [RemoteParameter]) -> Bool {
+        active.contains(parameter)
+    }
+}
+
 // MARK: - Chain metadata gating
 
 /// Parameter definitions can arrive after an effect was removed on Move.

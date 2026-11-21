@@ -14,6 +14,14 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## M1.22: Verify parameter ownership before sending
+
+- Guards begin-edit, end-edit and parameter writes against the *current full parameter definition* rather than merely its wire key. A stale knob or enum callback cannot write with obsolete ranges or options when another module reuses its key.
+- Does not modify the on-wire Schwung protocol or the existing mixer and slot-setting write paths.
+- Regression tests cover overlapping effect keys, current parameters, removed controls and changed Master FX choices.
+- **Upstream limitation:** Schwung Manager's `wsChainParams` message has `type`, `slot`, `component`, `data`, but no module revision/response request ID; indistinguishable metadata from two identically described modules cannot be reliably disambiguated by this client alone.
+- **Status:** committed to v0.9 development; build and hardware checks tracked separately.
+
 ## M1.21: Guard orphaned module metadata
 
 - After Schwung has supplied a chain listing, late `chain_params` responses for unoccupied synth, MIDI FX, audio FX or Master FX positions no longer repopulate the parameter editor.

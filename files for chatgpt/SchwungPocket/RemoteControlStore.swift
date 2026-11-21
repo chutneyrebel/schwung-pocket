@@ -1062,6 +1062,9 @@ final class RemoteControlStore: ObservableObject {
     // MARK: Parameter intents
 
     func beginEditing(_ parameter: RemoteParameter) {
+        guard isConnected,
+              RemoteParameterWritePolicy.isCurrent(parameter, in: parameters),
+              parameter.kind == .knob else { return }
         editingKeys.insert(parameter.wireKey)
         gestureWrites.begin(parameter.wireKey)
     }
@@ -1071,7 +1074,7 @@ final class RemoteControlStore: ObservableObject {
         guard let finalValue = gestureWrites.end(parameter.wireKey), isConnected else { return }
         // The knob can disappear during a module swap. Only complete a
         // gesture for a parameter still owned by the selected editor.
-        guard parameters.contains(where: { $0.wireKey == parameter.wireKey }) else { return }
+        guard RemoteParameterWritePolicy.isCurrent(parameter, in: parameters) else { return }
         switch wireTarget {
         case .slot(let slot):
             valueReconciler.wrote(finalValue, key: "slot:\(slot):\(parameter.wireKey)",
@@ -1258,9 +1261,10 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func sendParameter(_ text: String, for parameter: RemoteParameter) {
-        // A stale control can still finish its gesture as the socket closes.
-        // Do not optimistically publish a value when no live write is possible.
-        guard isConnected else { return }
+        // An old SwiftUI callback may fire after a hot-swap or metadata update.
+        // Verify the active definition, not just its wire key, before writing.
+        guard isConnected,
+              RemoteParameterWritePolicy.isCurrent(parameter, in: parameters) else { return }
         switch wireTarget {
         case .slot(let slot):
             let scopeKey = "slot:\(slot):\(parameter.wireKey)"

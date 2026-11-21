@@ -176,6 +176,35 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // Two effects can reuse fx1:mix. A stale old parameter definition
+        // must not be accepted just because its wire key still exists.
+        let formerMix = RemoteParameter.parse([
+            "key": "mix", "name": "Wet", "type": "float",
+            "min": 0, "max": 1, "step": 0.01
+        ], component: "fx1")!
+        let replacementMix = RemoteParameter.parse([
+            "key": "mix", "name": "Blend", "type": "float",
+            "min": 0, "max": 100, "step": 1
+        ], component: "fx1")!
+        check(formerMix.wireKey == replacementMix.wireKey,
+              "overlapping FX keys reproduce stale control risk")
+        check(!RemoteParameterWritePolicy.isCurrent(formerMix, in: [replacementMix]),
+              "old knob definition cannot write to a new effect with the same key")
+        check(RemoteParameterWritePolicy.isCurrent(replacementMix, in: [replacementMix]),
+              "current knob definition remains writable")
+        check(!RemoteParameterWritePolicy.isCurrent(replacementMix, in: []),
+              "removed module parameter cannot be written")
+        let formerChoice = RemoteParameter.parse([
+            "key": "mode", "name": "Mode", "type": "enum",
+            "options": ["Off", "On"]
+        ], component: "master_fx:fx1")!
+        let newChoice = RemoteParameter.parse([
+            "key": "mode", "name": "Mode", "type": "enum",
+            "options": ["Low", "High"]
+        ], component: "master_fx:fx1")!
+        check(!RemoteParameterWritePolicy.isCurrent(formerChoice, in: [newChoice]),
+              "old enum choices are rejected after Master FX metadata changes")
+
         // A delayed chain_params/param_update for an empty FX position must
         // not recreate controls after a valid device listing has removed it.
         let liveComponents = ["synth": "Drift", "fx1": "Delay"]
@@ -282,6 +311,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, active control ownership, chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }
