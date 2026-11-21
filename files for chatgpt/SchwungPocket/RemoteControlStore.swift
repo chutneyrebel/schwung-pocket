@@ -1532,29 +1532,7 @@ final class RemoteControlStore: ObservableObject {
             return
         }
 
-        // Dictionary iteration order is not module page order. Prefer an
-        // explicit page position, then natural numeric IDs, never page names.
-        let orderedEntries = rawLevels.compactMap { id, value -> (id: String, item: [String: Any], position: Int?)? in
-            guard let item = value as? [String: Any] else { return nil }
-            let position = (item["order"] as? Int) ?? (item["index"] as? Int)
-                ?? (item["position"] as? Int)
-            return (id, item, position)
-        }.sorted { left, right in
-            if left.id == "root" { return right.id != "root" }
-            if right.id == "root" { return false }
-            if let a = left.position, let b = right.position, a != b { return a < b }
-            if left.position != nil && right.position == nil { return true }
-            if left.position == nil && right.position != nil { return false }
-            return left.id.compare(right.id, options: [.numeric, .caseInsensitive]) == .orderedAscending
-        }
-        levels = orderedEntries.map { entry in
-            let keys: [String] = (entry.item["params"] as? [Any] ?? []).compactMap { value in
-                if let string = value as? String { return string }
-                if let dict = value as? [String: Any] { return dict["key"] as? String }
-                return nil
-            }
-            return RemoteLevel(id: entry.id, name: entry.item["name"] as? String ?? entry.id.capitalized, parameterKeys: keys)
-        }
+        levels = RemoteHierarchyLayout.levels(from: rawLevels)
         refreshOtherLevel()
         if !levels.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = levels.first?.id ?? "root" }
     }

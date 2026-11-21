@@ -324,6 +324,72 @@ struct RemoteOutboundQueue {
     mutating func clear() { entries.removeAll() }
 }
 
+
+// MARK: - Schwung hierarchy page order
+
+/// A hierarchy's `levels` field is a JSON object: its dictionary iteration
+/// order is not the order the module presents pages. The root level declares
+/// navigation links inside its ordered `params` array. Follow those links
+/// first, then append unreachable levels in a stable numeric-key order.
+enum RemoteHierarchyLayout {
+    static func levels(from rawLevels: [String: Any]) -> [RemoteLevel] {
+        let entries: [String: [String: Any]] = rawLevels.reduce(into: [:]) { result, pair in
+            if let item = pair.value as? [String: Any] { result[pair.key] = item }
+        }
+
+        var visited = Set<String>()
+        var orderedIDs: [String] = []
+
+        func visit(_ id: String) {
+            guard !visited.contains(id), let item = entries[id] else { return }
+            visited.insert(id)
+            orderedIDs.append(id)
+            if let child = item["children"] as? String { visit(child) }
+            for entry in item["params"] as? [Any] ?? [] {
+                if let info = entry as? [String: Any],
+                   let levelID = info["level"] as? String {
+                    visit(levelID)
+                }
+            }
+        }
+
+        visit("root")
+        let remainingIDs = entries.keys.sorted { left, right in
+            let a = entries[left] ?? [:]
+            let b = entries[right] ?? [:]
+            let ai = (a["order"] as? Int) ?? (a["index"] as? Int) ?? (a["position"] as? Int)
+            let bi = (b["order"] as? Int) ?? (b["index"] as? Int) ?? (b["position"] as? Int)
+            if let ai, let bi, ai != bi { return ai < bi }
+            if ai != nil && bi == nil { return true }
+            if ai == nil && bi != nil { return false }
+            return left.compare(right, options: [.numeric, .caseInsensitive]) == .orderedAscending
+        }
+        for id in remainingIDs { visit(id) }
+
+        return orderedIDs.compactMap { id in
+            guard let item = entries[id] else { return nil }
+            var keys: [String] = []
+            var seen = Set<String>()
+            func add(_ key: String) {
+                if !key.isEmpty && seen.insert(key).inserted { keys.append(key) }
+            }
+            // Schwung renders its encoder `knobs` before the regular
+            // `params` list. Each list has an explicit array order.
+            for key in item["knobs"] as? [String] ?? [] { add(key) }
+            for entry in item["params"] as? [Any] ?? [] {
+                if let key = entry as? String { add(key) }
+                else if let info = entry as? [String: Any],
+                        let key = info["key"] as? String { add(key) }
+            }
+            return RemoteLevel(
+                id: id,
+                name: (item["label"] as? String) ?? (item["name"] as? String) ?? id.capitalized,
+                parameterKeys: keys
+            )
+        }
+    }
+}
+
 // MARK: - Diagnostics
 
 /// Development-only logging. Enable with the toggle on the Native Controls screen

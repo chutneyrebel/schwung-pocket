@@ -64,6 +64,28 @@ struct RemoteControlRegression {
         check(groups.map(\.count) == [2, 1, 1, 1, 1], "interleaved page controls should form ordered groups")
         check(groups.flatMap { $0 }.map(\.key) == controls.map(\.key), "layout must preserve device parameter order")
         check(RemoteParameterLayout.groups([]).isEmpty, "empty pages stay empty")
-        print("PASS: remote queue ordering, barriers, cleanup and parameter layout")
+        // The root hierarchy declares navigation order, which is not
+        // alphabetical or dictionary order. Schwung renders knobs first.
+        let hierarchy: [String: Any] = [
+            "osc1": ["label": "OSC 1", "knobs": ["detune", "shape"],
+                     "params": [["key": "octave"], ["level": "root"]]],
+            "root": ["label": "Main", "knobs": ["volume"],
+                     "params": [["level": "filter"], ["level": "osc1"], ["level": "osc2"]]],
+            "osc2": ["label": "OSC 2", "knobs": ["wave"]],
+            "filter": ["label": "Filter", "knobs": ["cutoff"],
+                       "params": ["resonance", ["key": "drive"]]]
+        ]
+        let pages = RemoteHierarchyLayout.levels(from: hierarchy)
+        check(pages.map(\.id) == ["root", "filter", "osc1", "osc2"], "module navigation links determine page order")
+        check(pages[0].name == "Main" && pages[1].name == "Filter", "hierarchy labels are preserved")
+        check(pages[1].parameterKeys == ["cutoff", "resonance", "drive"], "knobs and list params retain order")
+        check(pages[2].parameterKeys == ["detune", "shape", "octave"], "page knob order is preserved")
+        let legacyPages = RemoteHierarchyLayout.levels(from: [
+            "page10": ["name": "Ten", "params": ["b"]],
+            "page2": ["name": "Two", "params": ["a"]]
+        ])
+        check(legacyPages.map(\.id) == ["page2", "page10"], "unlinked pages use natural numeric order")
+
+        print("PASS: remote queue, parameter layout, hierarchy ordering and cycle safety")
     }
 }
