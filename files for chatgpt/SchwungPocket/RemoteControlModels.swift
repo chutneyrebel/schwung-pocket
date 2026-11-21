@@ -403,6 +403,18 @@ enum RemoteHierarchyLayout {
 
 
 
+// MARK: - Async catalogue request ownership
+
+/// Only the latest Move address lookup may publish module catalogue results.
+/// Cancelling a task does not guarantee that a completed network callback
+/// will be prevented from updating UI state.
+enum RemoteCatalogRequestPolicy {
+    static func isCurrent(expectedGeneration: Int, currentGeneration: Int,
+                          cancelled: Bool) -> Bool {
+        expectedGeneration == currentGeneration && !cancelled
+    }
+}
+
 // MARK: - Connection retry policy
 
 /// Pure reconnect backoff shared by production and deterministic CI tests.

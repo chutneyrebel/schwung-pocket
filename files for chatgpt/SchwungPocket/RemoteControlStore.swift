@@ -73,6 +73,7 @@ final class RemoteControlStore: ObservableObject {
     private var toolRefreshTask: Task<Void, Never>?
     private var masterFXRefreshTask: Task<Void, Never>?
     private var connectionGeneration = 0
+    private var moduleCatalogGeneration = 0
     private var selectionGeneration = 0
     private var retryAttempt = 0
     private var wantsConnection = false
@@ -478,14 +479,26 @@ final class RemoteControlStore: ObservableObject {
 
     func loadSlotModules(address: String) {
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Always supersede an in-flight request, even when a cached catalogue
+        // can answer immediately. Otherwise an old Move can overwrite the picker.
+        moduleCatalogGeneration += 1
+        let catalogGeneration = moduleCatalogGeneration
+        moduleCatalogTask?.cancel()
+        moduleCatalogTask = nil
         // Returning to SchwungTroller should not re-fetch the same module catalogue
-        // on every appearance. Those HTTP requests compete with live WebSocket control
-        // traffic on the Move's local network. Failed/empty catalogues remain retryable.
+        // on every appearance. Failed/empty catalogues remain retryable.
         if loadedModuleCatalogAddress == trimmed, !availableSlotModules.isEmpty {
+            isLoadingSlotModules = false
+            slotModulesError = nil
             RemoteDiagnostics.log("reusing cached slot module catalogue for \(trimmed)")
             return
         }
-        moduleCatalogTask?.cancel()
+        // Never offer modules found on a different Move while the new address
+        // is still loading, or after a failed address lookup.
+        if loadedModuleCatalogAddress != trimmed {
+            availableSlotModules = []
+            loadedModuleCatalogAddress = nil
+        }
         isLoadingSlotModules = true
         slotModulesError = nil
         let input = trimmed.contains("://") ? trimmed : "https://\(trimmed)"
@@ -511,7 +524,14 @@ final class RemoteControlStore: ObservableObject {
         }
         let schemes = originalScheme == "https" ? ["https", "http"] : [originalScheme]
         moduleCatalogTask = Task { [weak self] in
-            defer { self?.isLoadingSlotModules = false }
+            // A cancelled request may finish after a newer request begins.
+            // Only its owner may reset the spinner or clear the task handle.
+            defer {
+                if self?.moduleCatalogGeneration == catalogGeneration {
+                    self?.isLoadingSlotModules = false
+                    self?.moduleCatalogTask = nil
+                }
+            }
             var lastError: Error?
             for scheme in schemes {
                 guard var components = URLComponents(url: addressURL, resolvingAgainstBaseURL: false) else { continue }
@@ -529,7 +549,11 @@ final class RemoteControlStore: ObservableObject {
                         throw URLError(.badServerResponse)
                     }
                     var catalogue = try JSONDecoder().decode([RemoteSlotModule].self, from: data)
-                    guard !Task.isCancelled else { return }
+                    guard RemoteCatalogRequestPolicy.isCurrent(
+                        expectedGeneration: catalogGeneration,
+                        currentGeneration: self?.moduleCatalogGeneration ?? -1,
+                        cancelled: Task.isCancelled
+                    ) else { return }
 
                     // /api/modules is the broad catalogue used by the picker, but
                     // some versions omit dsp_path there. Master FX loads audio
@@ -609,7 +633,11 @@ final class RemoteControlStore: ObservableObject {
                             ))
                         }
                     }
-                    guard !Task.isCancelled else { return }
+                    guard RemoteCatalogRequestPolicy.isCurrent(
+                        expectedGeneration: catalogGeneration,
+                        currentGeneration: self?.moduleCatalogGeneration ?? -1,
+                        cancelled: Task.isCancelled
+                    ) else { return }
                     // Keep the picker focused on modules installed on the Move.
                     let modules = catalogue.filter { $0.installed == true }
                     self?.availableSlotModules = modules
@@ -622,7 +650,11 @@ final class RemoteControlStore: ObservableObject {
                     RemoteDiagnostics.log("slot module catalogue failed at \(url.absoluteString): \(error.localizedDescription)")
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard RemoteCatalogRequestPolicy.isCurrent(
+                        expectedGeneration: catalogGeneration,
+                        currentGeneration: self?.moduleCatalogGeneration ?? -1,
+                        cancelled: Task.isCancelled
+                    ) else { return }
             self?.slotModulesError = "Could not load /api/modules over HTTPS or HTTP. Check the Move address and port 7700."
             if let lastError { RemoteDiagnostics.log("slot module catalogue exhausted fallbacks: \(lastError.localizedDescription)") }
         }

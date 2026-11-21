@@ -14,6 +14,15 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## Latest v0.9 reliability checkpoint
+
+### Module catalogue request ownership
+- Cancels superseded HTTP module-discovery tasks even when an existing cache can be reused immediately.
+- Clears an old Move's installed-module list when the address changes, so a new or failed lookup cannot offer modules from the wrong device.
+- Guards responses and loading-state cleanup with a request generation. An old request can no longer stop the spinner or overwrite the latest Move's module list.
+- Added deterministic regression checks for current, superseded and cancelled catalogue lookups.
+- **Status:** source implemented; GitHub Actions validation pending. Live Move address switching still requires hardware verification.
+
 ## New additions in the current development line
 
 ### Instrument and FX hot-swapping

@@ -176,6 +176,18 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
+        // Concurrent HTTP catalogue lookups must never publish stale results
+        // or let an older completion stop the newer request's loading spinner.
+        check(RemoteCatalogRequestPolicy.isCurrent(expectedGeneration: 4,
+              currentGeneration: 4, cancelled: false),
+              "latest catalogue request owns the response")
+        check(!RemoteCatalogRequestPolicy.isCurrent(expectedGeneration: 4,
+              currentGeneration: 5, cancelled: false),
+              "superseded Move address response must be discarded")
+        check(!RemoteCatalogRequestPolicy.isCurrent(expectedGeneration: 5,
+              currentGeneration: 5, cancelled: true),
+              "cancelled catalogue request must be discarded")
+
         // Reconnection delays are capped and a stale or cancelled timer
         // cannot reopen a superseded socket generation.
         check(RemoteReconnectPolicy.delaySeconds(for: 0, maxRetries: 6) == nil,
@@ -201,6 +213,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend and reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, catalogue ownership and reconnect policy")
     }
 }
