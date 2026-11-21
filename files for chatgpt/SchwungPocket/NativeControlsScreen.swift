@@ -70,13 +70,15 @@ struct NativeControlsScreen: View {
     @State private var rememberedSlotComponents: [RemoteDestination: SchwungChainComponent] = [:]
     @State private var rememberedInstrumentGroups: [String: String] = [:]
     @State private var workspace: TrollerWorkspace = .perform
+    @State private var initialWorkspaceApplied = false
+    @AppStorage("SchwungPocket.TrollerWorkspaceOrder.v1") private var storedWorkspaceOrder = "perform,chain,design"
+    @AppStorage("SchwungPocket.TrollerInitialWorkspace.v1") private var initialWorkspace = "perform"
     @State private var parameterStudioWidth: CGFloat = 320
     @State private var showingModulePicker = false
     @State private var showingClearConfirmation = false
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
     @StateObject private var midiActivity = MirrorMIDIActivityStore.shared
-    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedSectionOrder = "mixer,signalChain,parameters,connection,slotSettings"
     @AppStorage("SchwungPocket.TrollerCollapsedSections.v1") private var storedCollapsedSections = "connection,signalChain,parameters,slotSettings"
 
     var body: some View {
@@ -141,6 +143,11 @@ struct NativeControlsScreen: View {
         .toolbarBackground(Theme.background, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .onAppear {
+            if !initialWorkspaceApplied {
+                workspace = TrollerWorkspace(rawValue:
+                    RemoteWorkspacePreferences.initialView(initialWorkspace)) ?? .perform
+                initialWorkspaceApplied = true
+            }
             remote.loadSlotModules(address: device.addressText)
             // The screen stays mounted after its first visit, so this is normally a no-op.
             // It reconnects only if the screen was disconnected or the Move address changed.
@@ -372,8 +379,10 @@ struct NativeControlsScreen: View {
 
     private var workspaceSwitcher: some View {
         Picker("SchwungTroller workspace", selection: $workspace) {
-            ForEach(TrollerWorkspace.allCases) { view in
-                Text(view.title).tag(view)
+            ForEach(RemoteWorkspacePreferences.orderedViews(storedWorkspaceOrder), id: \.self) { name in
+                if let view = TrollerWorkspace(rawValue: name) {
+                    Text(view.title).tag(view)
+                }
             }
         }
         .pickerStyle(.segmented)
@@ -408,37 +417,6 @@ struct NativeControlsScreen: View {
         }
     }
 
-    private func sectionSummary(_ section: TrollerSection) -> String {
-        switch section {
-        case .connection:
-            return midiActivity.events.isEmpty ? "Link status and incoming MIDI" : "\(midiActivity.events.count) recent MIDI events"
-        case .mixer:
-            return "Four independent slot levels"
-        case .signalChain:
-            if isMasterFX {
-                let loaded = (1...max(remote.masterFXCapacity, 1)).filter {
-                    remote.componentNames["master_fx:fx\($0)"] != nil
-                }.count
-                return "\(loaded)/\(max(remote.masterFXCapacity, 1)) Master FX loaded"
-            }
-            let loaded = chainComponents.filter { remote.componentNames[$0.rawValue] != nil }.count
-            return "\(loaded)/\(chainComponents.count) modules loaded"
-        case .parameters:
-            return selectedComponentParameters.isEmpty
-                ? "Waiting for reported controls"
-                : "\(selectedComponentParameters.count) live controls · \(selectedChainComponent.title)"
-        case .slotSettings:
-            return "Current slot options"
-        }
-    }
-
-    private var orderedSections: [TrollerSection] {
-        let saved = storedSectionOrder.split(separator: ",")
-            .compactMap { TrollerSection(rawValue: String($0)) }
-            .filter { $0 != .mixer }
-        return [.mixer] + saved + TrollerSection.allCases.filter { $0 != .mixer && !saved.contains($0) }
-    }
-
     private var collapsedSections: Set<String> {
         Set(storedCollapsedSections.split(separator: ",").map(String.init))
     }
@@ -452,33 +430,6 @@ struct NativeControlsScreen: View {
                 .filter { collapsed.contains($0.rawValue) }
                 .map(\.rawValue)
                 .joined(separator: ",")
-        }
-    }
-
-    private func shouldShow(_ section: TrollerSection) -> Bool {
-        switch section {
-        case .connection, .mixer: return true
-        case .signalChain: return isInstrumentSlot || isMasterFX
-        case .parameters: return true
-        case .slotSettings: return isInstrumentSlot
-        }
-    }
-
-    @ViewBuilder
-    private func sectionContent(_ section: TrollerSection) -> some View {
-        switch section {
-        case .connection:
-            connectionCard
-        case .mixer:
-            destinationCard
-        case .signalChain:
-            if isInstrumentSlot { slotChainCard }
-            else if isMasterFX { masterFXCard }
-        case .parameters:
-            if isInstrumentSlot { parameterGroupCard }
-            contentSection
-        case .slotSettings:
-            slotSettingsCard
         }
     }
 

@@ -367,6 +367,23 @@ struct RemoteControlRegression {
               currentGeneration: 5, cancelled: true),
               "cancelled catalogue request must be discarded")
 
+        // Malformed or duplicated saved workspace order should normalize
+        // without hiding any of the three primary destinations.
+        check(RemoteWorkspacePreferences.orderedViews("design,perform,chain") ==
+              ["design", "perform", "chain"], "saved workspace order must be honored")
+        check(RemoteWorkspacePreferences.orderedViews("design,design,obsolete") ==
+              ["design", "perform", "chain"], "obsolete sections and duplicates must not persist")
+        check(RemoteWorkspacePreferences.orderedViews("") ==
+              ["perform", "chain", "design"], "fresh installs receive all three views")
+        check(RemoteWorkspacePreferences.initialView("invalid") == "perform",
+              "invalid launch workspace falls back to Perform")
+        check(RemoteWorkspacePreferences.initialView("design") == "design",
+              "user preferred starting workspace is preserved")
+        check(RemoteWorkspacePreferences.movedOrder("perform,chain,design", from: 0, by: 1) ==
+              ["chain", "perform", "design"], "workspace can be reordered")
+        check(RemoteWorkspacePreferences.movedOrder("perform,chain,design", from: 0, by: -1) ==
+              ["perform", "chain", "design"], "invalid order moves are ignored")
+
         // Hybrid workspace context restores only for the same instrument
         // and only when the instrument still exposes that group.
         check(RemoteWorkspaceContextPolicy.groupKey(
@@ -417,6 +434,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace context, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

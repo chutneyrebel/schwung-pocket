@@ -30,16 +30,15 @@ private enum PocketTab: String, CaseIterable, Hashable, Identifiable {
 }
 
 
-private enum TrollerPreferenceSection: String, CaseIterable, Identifiable {
-    case connection, mixer, signalChain, parameters, slotSettings
+private enum TrollerWorkspacePreference: String, CaseIterable, Identifiable {
+    case perform, chain, design
     var id: String { rawValue }
-    var title: String {
+    var title: String { rawValue.capitalized }
+    var symbol: String {
         switch self {
-        case .connection: return "Connection & MIDI Activity"
-        case .mixer: return "Performance Mixer"
-        case .signalChain: return "Signal Chain & Installed Modules"
-        case .parameters: return "Parameter Controls"
-        case .slotSettings: return "Slot Settings"
+        case .perform: return "slider.vertical.3"
+        case .chain: return "square.stack.3d.up"
+        case .design: return "slider.horizontal.3"
         }
     }
 }
@@ -1744,28 +1743,28 @@ private struct ConnectionSettingsScreen: View {
     @AppStorage("SchwungPocket.NavigationAutoHideTabs") private var navigationAutoHideTabs = "nativeControls,mirror"
     @AppStorage("SchwungPocket.MirrorControlsAutoHideEnabled") private var mirrorControlsAutoHideEnabled = true
     @AppStorage("SchwungPocket.MirrorControlsAutoHideSeconds") private var mirrorControlsAutoHideSeconds = 1
-    @AppStorage("SchwungPocket.TrollerSectionOrder.v1") private var storedTrollerSectionOrder = "mixer,signalChain,parameters,connection,slotSettings"
+    @AppStorage("SchwungPocket.TrollerWorkspaceOrder.v1") private var storedWorkspaceOrder = "perform,chain,design"
+    @AppStorage("SchwungPocket.TrollerInitialWorkspace.v1") private var initialWorkspace = "perform"
     @State private var moveDisplayName = "My Move"
     @State private var moveProfileMessage = "Save this Move to keep it in your device list."
 
 
-    private var orderedTrollerSections: [TrollerPreferenceSection] {
-        let saved = storedTrollerSectionOrder.split(separator: ",")
-            .compactMap { TrollerPreferenceSection(rawValue: String($0)) }
-            .filter { $0 != .mixer }
-        return [.mixer] + saved + TrollerPreferenceSection.allCases.filter { $0 != .mixer && !saved.contains($0) }
+    private var orderedWorkspaces: [TrollerWorkspacePreference] {
+        RemoteWorkspacePreferences.orderedViews(storedWorkspaceOrder)
+            .compactMap(TrollerWorkspacePreference.init(rawValue:))
     }
 
-    private func moveTrollerSection(from index: Int, by offset: Int) {
-        var sections = orderedTrollerSections
-        let destination = index + offset
-        guard sections.indices.contains(index),
-              sections.indices.contains(destination),
-              sections[index] != .mixer,
-              destination > 0 else { return }
-        let item = sections.remove(at: index)
-        sections.insert(item, at: destination)
-        storedTrollerSectionOrder = sections.map(\.rawValue).joined(separator: ",")
+    private func moveWorkspace(from index: Int, by offset: Int) {
+        storedWorkspaceOrder = RemoteWorkspacePreferences.movedOrder(
+            storedWorkspaceOrder, from: index, by: offset
+        ).joined(separator: ",")
+    }
+
+    private var preferredWorkspace: Binding<String> {
+        Binding(
+            get: { RemoteWorkspacePreferences.initialView(initialWorkspace) },
+            set: { initialWorkspace = RemoteWorkspacePreferences.initialView($0) }
+        )
     }
 
     private var savedMoves: [SavedMoveProfile] {
@@ -2011,45 +2010,46 @@ private struct ConnectionSettingsScreen: View {
                     }
 
                     PocketCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label("SchwungTroller section order", systemImage: "arrow.up.arrow.down")
+                        VStack(alignment: .leading, spacing: 12) {
+                            Label("SchwungTroller workspace", systemImage: "square.grid.3x1")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(.white)
-                            Text("The Performance Mixer stays at the top. Arrange the remaining sections to match your workflow; changes are saved automatically.")
+                            Text("Perform, Chain and Design are separate views. Arrange their switcher order without changing mixer levels, modules or live parameter state.")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.muted)
-                            ForEach(Array(orderedTrollerSections.enumerated()), id: \.element.id) { item in
+                            ForEach(Array(orderedWorkspaces.enumerated()), id: \.element.id) { item in
                                 let index = item.offset
-                                let section = item.element
+                                let view = item.element
                                 HStack(spacing: 9) {
-                                    Image(systemName: "line.3.horizontal")
+                                    Image(systemName: view.symbol)
                                         .foregroundStyle(Theme.accent)
-                                        .frame(width: 20)
-                                    Text(section.title)
+                                        .frame(width: 24)
+                                    Text(view.title)
                                         .font(.system(size: 13, weight: .medium))
                                         .foregroundStyle(.white)
                                     Spacer()
-                                    if section == .mixer {
-                                        Text("PINNED")
-                                            .font(.system(size: 9, weight: .heavy))
-                                            .tracking(0.8)
-                                            .foregroundStyle(Theme.muted)
-                                    } else {
-                                        Button { moveTrollerSection(from: index, by: -1) } label: {
-                                            Image(systemName: "chevron.up")
-                                        }
-                                        .disabled(index <= 1)
-                                        .opacity(index <= 1 ? 0.3 : 1)
-                                        Button { moveTrollerSection(from: index, by: 1) } label: {
-                                            Image(systemName: "chevron.down")
-                                        }
-                                        .disabled(index == orderedTrollerSections.count - 1)
-                                        .opacity(index == orderedTrollerSections.count - 1 ? 0.3 : 1)
+                                    Button { moveWorkspace(from: index, by: -1) } label: {
+                                        Image(systemName: "chevron.up")
                                     }
+                                    .disabled(index == 0)
+                                    .accessibilityLabel("Move \(view.title) earlier")
+                                    Button { moveWorkspace(from: index, by: 1) } label: {
+                                        Image(systemName: "chevron.down")
+                                    }
+                                    .disabled(index == orderedWorkspaces.count - 1)
+                                    .accessibilityLabel("Move \(view.title) later")
                                 }
-                                .font(.system(size: 13, weight: .medium))
                                 .padding(.vertical, 5)
                             }
+                            Picker("Starting workspace", selection: preferredWorkspace) {
+                                ForEach(TrollerWorkspacePreference.allCases) { view in
+                                    Text(view.title).tag(view.rawValue)
+                                }
+                            }
+                            .tint(Theme.accent)
+                            Text("The starting view applies when SchwungTroller opens in a new session. Switching workspaces during a session will not reset your selected slot or module.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.muted)
                         }
                     }
 

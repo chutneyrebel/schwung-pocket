@@ -14,6 +14,20 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Hybrid Workspace · Integrated UI polish (workspace preferences)
+
+**What changed:** Replaced Settings' obsolete single-page SchwungTroller section-order controls with reordering for the three actual Perform / Chain / Design views and a preferred starting workspace. The workspace switcher immediately reflects the saved order. The starting view is applied once per mounted SchwungTroller session so returning from Mirror does not unexpectedly reset user navigation. The existing Slot Settings disclosure preference remains intact.
+
+**How:** `ContentView.swift` now stores `SchwungPocket.TrollerWorkspaceOrder.v1` and `SchwungPocket.TrollerInitialWorkspace.v1` rather than exposing the inactive old section order. `NativeControlsScreen.swift` consumes the same keys; its old unused section-order view helpers are retired. A shared, pure `RemoteWorkspacePreferences` policy in `RemoteControlModels.swift` validates, deduplicates and completes order strings, protects against invalid starting views and safely processes reorder actions. Regression tests verify defaults, malformed legacy-like preferences, reordering and bounds.
+
+**Why:** Settings must control real behavior. The previous section-order UI wrote a stored preference that the new three-view layout no longer read, misleading users into thinking the screen changed. This preserves meaningful customization without interfering with Schwung's live state.
+
+**Affected files:** `files for chatgpt/SchwungPocket/ContentView.swift`, `files for chatgpt/SchwungPocket/NativeControlsScreen.swift`, `files for chatgpt/SchwungPocket/RemoteControlModels.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md` and `docs/v0.9-development-test-matrix.md`.
+
+**Compatibility:** Legacy `SchwungPocket.TrollerSectionOrder.v1` data is left untouched but is no longer surfaced: old sections have no one-to-one mapping into three independent views. Existing users receive the default workspace order; old collapsed Slot Settings preferences remain functional. No API, mixer, module or parameter-write changes.
+
+**Testing decision:** User deferred physical testing. No hardware checks are requested now. CI compilation, Swift syntax and model regressions are required, with a future consolidated visual/hardware pass checking stored preferences, slot/parameter restoration and all previously deferred M1.18–M1.24 scenarios. Continue UI refinement after successful CI without changing `main`.
+
 ## v0.9 Hybrid Workspace · Phase 5 (integrated workspace QA)
 
 **Build gate:** Build #369, commit `20c9aca`, completed successfully before this phase.

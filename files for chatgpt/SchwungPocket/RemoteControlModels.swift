@@ -1,6 +1,36 @@
 import Foundation
 import os
 
+// MARK: - Workspace preferences
+
+/// Preferences only reorder navigation; they cannot modify Move's sound state.
+/// Legacy section-order keys are left intact but no longer drive the hybrid UI.
+enum RemoteWorkspacePreferences {
+    static let defaultOrder = ["perform", "chain", "design"]
+    static let validViews = Set(defaultOrder)
+
+    static func orderedViews(_ stored: String) -> [String] {
+        let found = stored.split(separator: ",").map(String.init)
+        var unique: [String] = []
+        for view in found where validViews.contains(view) && !unique.contains(view) {
+            unique.append(view)
+        }
+        return unique + defaultOrder.filter { !unique.contains($0) }
+    }
+
+    static func initialView(_ stored: String) -> String {
+        validViews.contains(stored) ? stored : "perform"
+    }
+
+    static func movedOrder(_ stored: String, from index: Int, by offset: Int) -> [String] {
+        var views = orderedViews(stored)
+        let destination = index + offset
+        guard views.indices.contains(index), views.indices.contains(destination) else { return views }
+        views.insert(views.remove(at: index), at: destination)
+        return views
+    }
+}
+
 // MARK: - Destinations
 
 /// The six destinations shown in the Native Controls selector.
