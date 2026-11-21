@@ -1532,7 +1532,12 @@ final class RemoteControlStore: ObservableObject {
             return
         }
 
-        levels = RemoteHierarchyLayout.levels(from: rawLevels)
+        let updatedLevels = RemoteHierarchyLayout.levels(from: rawLevels)
+        // Schwung can re-broadcast an unchanged hierarchy whenever live
+        // parameter values change. Avoid invalidating SwiftUI navigation and
+        // knob views for value-only updates.
+        guard levels.filter({ $0.id != "other" }) != updatedLevels else { return }
+        levels = updatedLevels
         refreshOtherLevel()
         if !levels.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = levels.first?.id ?? "root" }
     }
