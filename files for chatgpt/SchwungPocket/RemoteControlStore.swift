@@ -388,14 +388,9 @@ final class RemoteControlStore: ObservableObject {
     func refresh() {
         guard isConnected else { return }
         clearPresentedData()
-        // Refresh invalidates the previously displayed snapshot. Keep unrelated
-        // slots unchanged, but do not show the selected slot's old values while
-        // waiting for a fresh response.
-        if case .slot(let slot) = wireTarget {
-            slotMixStates.removeValue(forKey: slot)
-            slotInstrumentNames.removeValue(forKey: slot)
-            slotModuleStatuses.removeValue(forKey: slot)
-        }
+        // Reload only the parameter editor. The performance mixer has its
+        // own connection-scoped snapshots, and a metadata refresh must not
+        // temporarily reset a fader or show CHECKING for the selected slot.
         switch wireTarget {
         case .slot(let slot): subscribe(slot: slot)
         case .masterFX: beginLoading(); send(["type": "subscribe_master_fx"])
@@ -1185,7 +1180,13 @@ final class RemoteControlStore: ObservableObject {
                 let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
                 slotInstrumentNames[slot] = cleaned.isEmpty ? nil : cleaned
             }
-            slotModuleStatuses[slot] = Self.slotModuleStatus(from: message)
+            let incomingStatus = Self.slotModuleStatus(from: message)
+            // A partial slot_info can mark sections unknown while the device
+            // is still resolving them. Do not replace a previously confirmed
+            // status with an inconclusive response.
+            if incomingStatus != .unknown || slotModuleStatuses[slot] == nil {
+                slotModuleStatuses[slot] = incomingStatus
+            }
         }
         if type == "param_update",
            let slot = message["slot"] as? Int,
