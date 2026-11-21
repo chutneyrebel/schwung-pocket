@@ -78,6 +78,7 @@ final class RemoteControlStore: ObservableObject {
     private var resumeAfterBackground = false
     private var editingKeys = Set<String>()
     private var lastSent: [String: String] = [:]
+    private var valueReconciler = RemoteValueReconciler()
     private var pendingMasterFXClears: [String: Date] = [:]
     private var loadedModuleCatalogAddress: String?
 
@@ -249,6 +250,7 @@ final class RemoteControlStore: ObservableObject {
         pendingSendTask?.cancel()
         pendingSendTask = nil
         pendingMessages.clear()
+        valueReconciler.clear()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
     }
@@ -433,6 +435,9 @@ final class RemoteControlStore: ObservableObject {
         selectedLevelID = "root"
         editingKeys.removeAll()
         lastSent.removeAll()
+        // Destination metadata is invalidated; preserve separate mixer
+        // reconciliation for other slots only until their grace window ends.
+        valueReconciler.clear()
     }
 
     /// Clear connection-scoped state, but keep the selected destination and
@@ -670,10 +675,12 @@ final class RemoteControlStore: ObservableObject {
                 || component.range(of: #"^fx[1-8]$"#, options: .regularExpression) != nil
             guard isSupported else { return }
             values[component + ":bypassed"] = value
+            valueReconciler.wrote(value, key: "slot:\(slot):\(component):bypassed", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_param", "slot": slot, "key": component + ":bypassed", "value": value])
         case .masterFX:
             guard component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil else { return }
             values[component + ":bypassed"] = value
+            valueReconciler.wrote(value, key: "masterFX:\(component):bypassed", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_master_fx_param", "key": component + ":bypassed", "value": value])
         case .tool, .unverified:
             // The standard Tool protocol has no generic bypass command.
@@ -881,6 +888,11 @@ final class RemoteControlStore: ObservableObject {
         // Forget that editing state so the replacement module can receive fresh
         // parameter updates instead of silently skipping matching wire keys.
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
+        switch wireTarget {
+        case .slot(let slot): valueReconciler.clear(prefix: "slot:\(slot):\(component):")
+        case .masterFX: valueReconciler.clear(prefix: "masterFX:\(component):")
+        case .tool, .unverified: break
+        }
         customComponentUIURLs.removeValue(forKey: component)
     }
 
@@ -972,6 +984,7 @@ final class RemoteControlStore: ObservableObject {
             else if let number = value as? NSNumber { text = number.stringValue }
             else { text = nil }
             guard let text else { continue }
+            guard valueReconciler.accepts(text, key: "slot:\(slot):\(key)", at: ProcessInfo.processInfo.systemUptime) else { continue }
             if key == "slot:muted" { state.muted = text == "1" || text.lowercased() == "true" }
             if key == "slot:soloed" { state.soloed = text == "1" || text.lowercased() == "true" }
             if key == "slot:volume", let number = Double(text), number.isFinite {
@@ -1054,6 +1067,7 @@ final class RemoteControlStore: ObservableObject {
             values[key] = value
             lastSent[key] = value
         }
+        valueReconciler.wrote(value, key: "slot:\(slot):\(key)", at: ProcessInfo.processInfo.systemUptime)
         send(["type": "set_param", "slot": slot, "key": key, "value": value])
     }
 
@@ -1066,11 +1080,13 @@ final class RemoteControlStore: ObservableObject {
             guard lastSent[parameter.wireKey] != text else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
+            valueReconciler.wrote(text, key: "slot:\(slot):\(parameter.wireKey)", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
         case .masterFX:
             guard lastSent[parameter.wireKey] != text else { return }
             values[parameter.wireKey] = text
             lastSent[parameter.wireKey] = text
+            valueReconciler.wrote(text, key: "masterFX:\(parameter.wireKey)", at: ProcessInfo.processInfo.systemUptime)
             send(["type": "set_master_fx_param", "key": parameter.wireKey, "value": text])
         case .tool, .unverified:
             // No verified generic editable parameters exist for these targets.
@@ -1582,16 +1598,28 @@ final class RemoteControlStore: ObservableObject {
 
     private func handleParamUpdate(_ message: [String: Any]) {
         guard let params = message["params"] as? [String: Any] else { return }
+        let scope: String
+        switch wireTarget {
+        case .slot(let slot): scope = "slot:\(slot):"
+        case .masterFX: scope = "masterFX:"
+        case .tool, .unverified: return
+        }
         var merged = values
-        for (key, value) in params {
-            // Don't fight the user's finger: skip keys currently being dragged.
+        for (key, raw) in params {
+            // Never fight a knob currently being dragged.
             if editingKeys.contains(key) { continue }
-            if let string = value as? String { merged[key] = string }
-            else if let number = value as? NSNumber { merged[key] = number.stringValue }
+            let text: String
+            if let string = raw as? String { text = string }
+            else if let number = raw as? NSNumber { text = number.stringValue }
+            else { continue }
+            // A late echo of an older control position must not override a
+            // newer local edit. After the short grace window the device wins.
+            guard valueReconciler.accepts(text, key: scope + key,
+                                          at: ProcessInfo.processInfo.systemUptime) else { continue }
+            merged[key] = text
+            lastSent[key] = text
         }
         values = merged
-        // Remember what the device reported so an unchanged knob never echoes it back.
-        for (key, value) in merged where !editingKeys.contains(key) { lastSent[key] = value }
     }
 
     // MARK: Helpers

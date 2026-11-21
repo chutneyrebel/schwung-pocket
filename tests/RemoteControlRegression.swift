@@ -86,6 +86,23 @@ struct RemoteControlRegression {
         ])
         check(legacyPages.map(\.id) == ["page2", "page10"], "unlinked pages use natural numeric order")
 
-        print("PASS: remote queue, parameter layout, hierarchy ordering and cycle safety")
+        // Delayed device echoes should not pull a recently edited knob
+        // backwards, but the device must eventually become authoritative.
+        var reconcile = RemoteValueReconciler()
+        reconcile.wrote("0.80", key: "slot:0:synth:cutoff", at: 10.0)
+        check(!reconcile.accepts("0.20", key: "slot:0:synth:cutoff", at: 10.2), "recent stale echo must be ignored")
+        check(reconcile.accepts("0.8", key: "slot:0:synth:cutoff", at: 10.3), "equivalent numeric echo confirms")
+        check(reconcile.pending.isEmpty, "confirmation clears pending value")
+        reconcile.wrote("0.80", key: "slot:0:synth:cutoff", at: 12.0)
+        check(reconcile.accepts("0.70", key: "slot:0:synth:cutoff", at: 13.1), "later authoritative device update wins")
+        check(reconcile.pending.isEmpty, "device reconciliation clears pending value")
+        reconcile.wrote("1", key: "slot:0:slot:muted", at: 15.0)
+        reconcile.wrote("0", key: "slot:1:slot:muted", at: 15.0)
+        reconcile.clear(prefix: "slot:0:")
+        check(reconcile.pending.count == 1, "component/slot cleanup must not clear other slots")
+        reconcile.clear()
+        check(reconcile.pending.isEmpty, "disconnect drops optimistic pending state")
+
+        print("PASS: remote queue, hierarchy and delayed-echo reconciliation")
     }
 }

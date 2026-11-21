@@ -390,6 +390,54 @@ enum RemoteHierarchyLayout {
     }
 }
 
+
+// MARK: - In-flight value reconciliation
+
+/// A socket send is not a device acknowledgement. Keep an optimistic value
+/// briefly while previously queued device echoes drain, then accept the Move's
+/// authoritative value (including quantization or external automation).
+/// All times are monotonic uptime supplied by the caller and injectable in tests.
+struct RemoteValueReconciler {
+    struct Pending {
+        let value: String
+        let createdAt: TimeInterval
+    }
+
+    private(set) var pending: [String: Pending] = [:]
+    static let staleEchoGrace: TimeInterval = 1.0
+
+    mutating func wrote(_ value: String, key: String, at uptime: TimeInterval) {
+        pending[key] = Pending(value: value, createdAt: uptime)
+    }
+
+    /// Returns whether the received device value should replace local state.
+    mutating func accepts(_ deviceValue: String, key: String, at uptime: TimeInterval) -> Bool {
+        guard let current = pending[key] else { return true }
+        if Self.equivalent(current.value, deviceValue) {
+            pending.removeValue(forKey: key)
+            return true
+        }
+        if uptime - current.createdAt < Self.staleEchoGrace {
+            return false
+        }
+        pending.removeValue(forKey: key)
+        return true
+    }
+
+    mutating func clear(prefix: String) {
+        pending = pending.filter { !$0.key.hasPrefix(prefix) }
+    }
+
+    mutating func clear() { pending.removeAll() }
+
+    private static func equivalent(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return true }
+        guard let a = Double(lhs), let b = Double(rhs),
+              a.isFinite, b.isFinite else { return false }
+        return abs(a - b) < 0.00001
+    }
+}
+
 // MARK: - Diagnostics
 
 /// Development-only logging. Enable with the toggle on the Native Controls screen
