@@ -402,6 +402,23 @@ enum RemoteHierarchyLayout {
 
 
 
+
+// MARK: - Connection retry policy
+
+/// Pure reconnect backoff shared by production and deterministic CI tests.
+/// Failed socket generations must not revive after a manual reconnect.
+enum RemoteReconnectPolicy {
+    static func delaySeconds(for attempt: Int, maxRetries: Int) -> TimeInterval? {
+        guard attempt >= 1, attempt <= maxRetries else { return nil }
+        return min(pow(2.0, Double(attempt - 1)), 30)
+    }
+
+    static func retryIsCurrent(expectedGeneration: Int, currentGeneration: Int,
+                               wantsConnection: Bool, cancelled: Bool) -> Bool {
+        expectedGeneration == currentGeneration && wantsConnection && !cancelled
+    }
+}
+
 // MARK: - Final gesture write tracking
 
 /// A control's final drag update may be lost while earlier absolute-value

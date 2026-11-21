@@ -318,18 +318,33 @@ final class RemoteControlStore: ObservableObject {
         clearLiveConnectionState()
         guard wantsConnection else { return }
         retryAttempt += 1
-        if retryAttempt > maxRetries {
+        guard let delaySeconds = RemoteReconnectPolicy.delaySeconds(
+            for: retryAttempt, maxRetries: maxRetries
+        ) else {
             wantsConnection = false
             connection = .failed("Couldn't reach the Move. Check Wi-Fi and the address, then tap Connect.")
             if loadState == .loading { loadState = .error("Connection lost") }
             return
         }
         connection = .reconnecting(attempt: retryAttempt)
-        let delaySeconds = min(pow(2.0, Double(retryAttempt - 1)), 30)
         retryTask?.cancel()
+        let retryGeneration = connectionGeneration
         retryTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
-            guard let self, !Task.isCancelled, self.wantsConnection else { return }
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            } catch {
+                return
+            }
+            guard let self,
+                  RemoteReconnectPolicy.retryIsCurrent(
+                    expectedGeneration: retryGeneration,
+                    currentGeneration: self.connectionGeneration,
+                    wantsConnection: self.wantsConnection,
+                    cancelled: Task.isCancelled
+                  ),
+                  self.connection == .reconnecting(attempt: self.retryAttempt)
+            else { return }
+            self.retryTask = nil
             self.openSocket(isRetry: true)
         }
     }

@@ -176,6 +176,31 @@ struct RemoteControlRegression {
                                    lastReportedOrSent: "0.5", at: 30.0),
               "confirmed values never become retryable with age")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation and user-driven resend")
+        // Reconnection delays are capped and a stale or cancelled timer
+        // cannot reopen a superseded socket generation.
+        check(RemoteReconnectPolicy.delaySeconds(for: 0, maxRetries: 6) == nil,
+              "attempt zero is invalid")
+        check(RemoteReconnectPolicy.delaySeconds(for: 1, maxRetries: 6) == 1,
+              "first retry backoff is one second")
+        check(RemoteReconnectPolicy.delaySeconds(for: 2, maxRetries: 6) == 2,
+              "second retry doubles the backoff")
+        check(RemoteReconnectPolicy.delaySeconds(for: 6, maxRetries: 6) == 30,
+              "retry delay is capped at thirty seconds")
+        check(RemoteReconnectPolicy.delaySeconds(for: 7, maxRetries: 6) == nil,
+              "retry limit is enforced")
+        check(RemoteReconnectPolicy.retryIsCurrent(expectedGeneration: 5,
+              currentGeneration: 5, wantsConnection: true, cancelled: false),
+              "active retry may reconnect")
+        check(!RemoteReconnectPolicy.retryIsCurrent(expectedGeneration: 5,
+              currentGeneration: 6, wantsConnection: true, cancelled: false),
+              "superseded socket generation cannot reconnect")
+        check(!RemoteReconnectPolicy.retryIsCurrent(expectedGeneration: 5,
+              currentGeneration: 5, wantsConnection: false, cancelled: false),
+              "manual disconnect cancels retry eligibility")
+        check(!RemoteReconnectPolicy.retryIsCurrent(expectedGeneration: 5,
+              currentGeneration: 5, wantsConnection: true, cancelled: true),
+              "cancelled retry cannot reopen socket")
+
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend and reconnect policy")
     }
 }
