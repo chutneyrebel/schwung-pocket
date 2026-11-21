@@ -1081,9 +1081,12 @@ final class RemoteControlStore: ObservableObject {
         let generation = connectionGeneration
         let text = Self.jsonString(message)
         Task { [weak self] in
+            // Sending is asynchronous. A disconnect or reconnect may invalidate
+            // this socket before the task runs; never write queued controls to it.
+            guard let self, self.isCurrentGeneration(generation) else { return }
             do { try await task.send(.string(text)) }
             catch {
-                guard let self, generation == self.connectionGeneration else { return }
+                guard self.isCurrentGeneration(generation) else { return }
                 self.handleConnectionLoss(error)
             }
         }
