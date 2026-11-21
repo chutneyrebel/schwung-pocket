@@ -636,6 +636,7 @@ final class RemoteControlStore: ObservableObject {
         parameters.removeAll { $0.component == component }
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": module.id])
         RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
@@ -656,6 +657,7 @@ final class RemoteControlStore: ObservableObject {
         parameters.removeAll { $0.component == component }
         values = values.filter { !$0.key.hasPrefix(component + ":") }
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
+        editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": "none"])
         RemoteDiagnostics.log("Requested module clear: slot=\(slot) component=\(component)")
@@ -997,7 +999,12 @@ final class RemoteControlStore: ObservableObject {
 
     func refreshSlotMixStates() {
         guard isConnected else { return }
-        for slot in 0...3 { subscribe(slot: slot) }
+        // Mixer snapshots are background subscriptions, not a change to the
+        // active parameter editor. Do not reset its loading state or timeout
+        // for every mixer tile.
+        for slot in 0...3 {
+            send(["type": "subscribe", "slot": slot])
+        }
     }
 
     func setSlotVolume(_ proposed: Double) {
@@ -1065,20 +1072,23 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func sendParameter(_ text: String, for parameter: RemoteParameter) {
-        values[parameter.wireKey] = text
-        guard lastSent[parameter.wireKey] != text else { return }
-        lastSent[parameter.wireKey] = text
+        // A stale control can still finish its gesture as the socket closes.
+        // Do not optimistically publish a value when no live write is possible.
+        guard isConnected else { return }
         switch wireTarget {
         case .slot(let slot):
+            guard lastSent[parameter.wireKey] != text else { return }
+            values[parameter.wireKey] = text
+            lastSent[parameter.wireKey] = text
             send(["type": "set_param", "slot": slot, "key": parameter.wireKey, "value": text])
         case .masterFX:
+            guard lastSent[parameter.wireKey] != text else { return }
+            values[parameter.wireKey] = text
+            lastSent[parameter.wireKey] = text
             send(["type": "set_master_fx_param", "key": parameter.wireKey, "value": text])
-        case .tool:
-            // Tool state currently arrives without parameter type/range metadata.
-            // Generic values stay read-only until Schwung exposes safe editable metadata.
-            break
-        case .unverified:
-            break
+        case .tool, .unverified:
+            // No verified generic editable parameters exist for these targets.
+            return
         }
     }
 
