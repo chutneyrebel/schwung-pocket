@@ -54,6 +54,17 @@ enum RemoteChainPositionPresentation: Equatable {
     var canAdd: Bool { self == .empty }
 }
 
+/// Module selection sheets must also retain their original target.
+struct RemoteModulePickerIntent: Identifiable, Equatable {
+    let destination: RemoteDestination
+    let component: String
+    var id: String { destination.rawValue + ":" + component }
+
+    func isCurrent(destination: RemoteDestination, membershipConfirmed: Bool) -> Bool {
+        self.destination == destination && membershipConfirmed
+    }
+}
+
 /// A destructive action retains the originally requested destination and
 /// component. A later UI selection cannot retarget the confirmation.
 struct RemoteSlotClearIntent: Equatable {

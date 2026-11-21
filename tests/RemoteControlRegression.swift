@@ -409,6 +409,24 @@ struct RemoteControlRegression {
         check(!clearIntent.isCurrent(destination: .slot2), "Clear cannot retarget a new slot")
         check(clearIntent.component == "fx2", "Clear must retain original component")
 
+        // A module-picker sheet captures the target selected when opened.
+        // Switching slots or losing membership cannot silently retarget a swap.
+        let capturedSlotPicker = RemoteModulePickerIntent(destination: .slot1, component: "fx2")
+        check(capturedSlotPicker.id == "slot1:fx2",
+              "module picker identity includes original slot and position")
+        check(capturedSlotPicker.isCurrent(destination: .slot1, membershipConfirmed: true),
+              "picker remains eligible on its original confirmed slot")
+        check(!capturedSlotPicker.isCurrent(destination: .slot2, membershipConfirmed: true),
+              "picker cannot replace a module in another slot")
+        check(!capturedSlotPicker.isCurrent(destination: .slot1, membershipConfirmed: false),
+              "picker cannot act after metadata is invalidated")
+        let capturedMasterPicker = RemoteModulePickerIntent(
+            destination: .masterFX, component: "master_fx:fx3"
+        )
+        check(capturedMasterPicker.component == "master_fx:fx3" &&
+              !capturedMasterPicker.isCurrent(destination: .slot1, membershipConfirmed: true),
+              "Master FX picker stays on its original master chain")
+
         // Hybrid workspace context restores only for the same instrument
         // and only when the instrument still exposes that group.
         check(RemoteWorkspaceContextPolicy.groupKey(
@@ -459,6 +477,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, chain certainty and clear intent, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, metadata reconciliation, active control ownership, workspace preferences and context, stable module picker, chain certainty and clear intent, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

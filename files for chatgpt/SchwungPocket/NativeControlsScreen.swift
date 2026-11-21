@@ -116,7 +116,7 @@ struct NativeControlsScreen: View {
     @AppStorage("SchwungPocket.TrollerWorkspaceOrder.v1") private var storedWorkspaceOrder = "perform,chain,design"
     @AppStorage("SchwungPocket.TrollerInitialWorkspace.v1") private var initialWorkspace = "perform"
     @State private var parameterStudioWidth: CGFloat = 320
-    @State private var showingModulePicker = false
+    @State private var modulePickerIntent: RemoteModulePickerIntent?
     @State private var pendingSlotClearIntent: RemoteSlotClearIntent?
     @State private var pendingMasterFXClearComponent: String?
     @State private var showingMIDILog = false
@@ -211,12 +211,13 @@ struct NativeControlsScreen: View {
         .onChange(of: remote.levels) { _ in
             restoreSelectedInstrumentGroup()
         }
-        .sheet(isPresented: $showingModulePicker) {
-            if isMasterFX {
-                ModuleSwapSheet(remote: remote, address: device.addressText, component: nil, masterFXComponent: remote.selectedMasterFXComponent)
-            } else {
-                ModuleSwapSheet(remote: remote, address: device.addressText, component: selectedChainComponent, masterFXComponent: nil)
-            }
+        .sheet(item: $modulePickerIntent) { intent in
+            ModuleSwapSheet(
+                remote: remote, address: device.addressText,
+                component: componentForPicker(intent),
+                masterFXComponent: intent.destination == .masterFX ? intent.component : nil,
+                intent: intent
+            )
         }
         .confirmationDialog(
             "Clear selected slot module?",
@@ -541,8 +542,7 @@ struct NativeControlsScreen: View {
                     Spacer(minLength: 4)
                     Button {
                         if isMasterFX {
-                            remote.loadSlotModules(address: device.addressText)
-                            showingModulePicker = true
+                            openMasterFXPicker(for: remote.selectedMasterFXComponent)
                         } else {
                             openModulePicker(for: selectedChainComponent)
                         }
@@ -811,12 +811,25 @@ struct NativeControlsScreen: View {
         chainPositionState(component, moduleName: moduleName).label
     }
 
+    private func componentForPicker(_ intent: RemoteModulePickerIntent) -> SchwungChainComponent? {
+        guard intent.destination != .masterFX else { return nil }
+        return chainComponents.first(where: { $0.rawValue == intent.component })
+    }
+
+    private func openMasterFXPicker(for component: String) {
+        guard remote.isConnected, remote.isChainMembershipConfirmed(component) else { return }
+        remote.loadSlotModules(address: device.addressText)
+        modulePickerIntent = RemoteModulePickerIntent(destination: remote.destination, component: component)
+    }
+
     private func openModulePicker(for component: SchwungChainComponent) {
         guard remote.isConnected,
               remote.isChainMembershipConfirmed(component.rawValue) else { return }
         selectWorkspaceComponent(component)
         remote.loadSlotModules(address: device.addressText)
-        showingModulePicker = true
+        modulePickerIntent = RemoteModulePickerIntent(
+            destination: remote.destination, component: component.rawValue
+        )
     }
 
     private var slotChainCard: some View {
@@ -1296,8 +1309,7 @@ struct NativeControlsScreen: View {
                         .foregroundStyle(Theme.muted)
                     Spacer(minLength: 4)
                     Button {
-                        remote.loadSlotModules(address: device.addressText)
-                        showingModulePicker = true
+                        openMasterFXPicker(for: remote.selectedMasterFXComponent)
                     } label: {
                         Label(remote.componentNames[remote.selectedMasterFXComponent] == nil ? "Add" : "Swap",
                               systemImage: remote.componentNames[remote.selectedMasterFXComponent] == nil ? "plus" : "arrow.left.arrow.right")
@@ -1326,8 +1338,7 @@ struct NativeControlsScreen: View {
                                 if moduleName != nil {
                                     workspace = .design
                                 } else if chainPositionState(key, moduleName: moduleName).canAdd {
-                                    remote.loadSlotModules(address: device.addressText)
-                                    showingModulePicker = true
+                                    openMasterFXPicker(for: key)
                                 }
                             } label: {
                                 VStack(alignment: .leading, spacing: 5) {
@@ -1954,9 +1965,17 @@ private struct ModuleSwapSheet: View {
     let address: String
     let component: SchwungChainComponent?
     let masterFXComponent: String?
+    let intent: RemoteModulePickerIntent
     @Environment(\.dismiss) private var dismiss
     @State private var pendingModule: RemoteSlotModule?
     @State private var searchText = ""
+
+    private var targetIsCurrent: Bool {
+        remote.isConnected && intent.isCurrent(
+            destination: remote.destination,
+            membershipConfirmed: remote.isChainMembershipConfirmed(intent.component)
+        ) && (component != nil || masterFXComponent != nil)
+    }
 
     private var displayTitle: String {
         component?.title ?? masterFXComponent?.replacingOccurrences(of: "master_fx:", with: "").uppercased() ?? "Master FX"
@@ -2001,6 +2020,13 @@ private struct ModuleSwapSheet: View {
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
+                if !targetIsCurrent {
+                    Section {
+                        Text("The Move connection, selected slot, or module membership changed. Close this picker and reopen it from the intended position.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.orange)
+                    }
+                }
                 if remote.isLoadingSlotModules {
                     HStack { ProgressView(); Text("Reading installed modules…") }
                 }
@@ -2024,7 +2050,7 @@ private struct ModuleSwapSheet: View {
                         Section("\(displayTitle) · \(group.title)") {
                             ForEach(group.modules) { module in
                                 Button {
-                                    pendingModule = module
+                                    if targetIsCurrent { pendingModule = module }
                                 } label: {
                                     HStack(spacing: 10) {
                                         Image(systemName: module.id == pendingModule?.id ? "checkmark.circle.fill" : "waveform")
@@ -2053,6 +2079,7 @@ private struct ModuleSwapSheet: View {
                                     .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(!targetIsCurrent)
                             }
                         }
                     }
@@ -2080,14 +2107,17 @@ private struct ModuleSwapSheet: View {
             ) {
                 if let module = pendingModule {
                     Button("Replace with \(module.name)", role: .destructive) {
-                        if let component {
-                            remote.swapModule(component: component.rawValue, moduleID: module.id)
-                        } else if let masterFXComponent {
-                            remote.swapMasterFXModule(component: masterFXComponent, moduleID: module.id)
+                        if targetIsCurrent {
+                            if let component {
+                                remote.swapModule(component: component.rawValue, moduleID: module.id)
+                            } else if let masterFXComponent {
+                                remote.swapMasterFXModule(component: masterFXComponent, moduleID: module.id)
+                            }
                         }
                         pendingModule = nil
                         dismiss()
                     }
+                    .disabled(!targetIsCurrent)
                 }
                 Button("Cancel", role: .cancel) { pendingModule = nil }
             } message: {

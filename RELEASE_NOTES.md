@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Code-only integration QA · Stable module picker target
+
+**Build gate:** GitHub Actions #375 passed (commit `7a3510f`) before this QA change.
+
+**What was fixed:** The Add/Swap sheet was formerly created using live `selectedChainComponent` or `selectedMasterFXComponent`, potentially making an outstanding picker follow a later selection. The sheet now captures the original destination and exact chain component as a dedicated intent when opened. Confirming a replacement rechecks the destination and confirmed component membership, refuses a stale operation, and never redirects the request to another position.
+
+**How:** Added `RemoteModulePickerIntent` in `RemoteControlModels.swift`, changed `NativeControlsScreen.swift` to use `.sheet(item:)` rather than a global Boolean, and consolidated picker entrypoints for slot and Master FX chains. `ModuleSwapSheet` receives its immutable target and validates it at selection/confirmation time. The existing `RemoteControlStore.swapModule` and `swapMasterFXModule` methods, catalog discovery, and protocol payloads were not altered. Regression tests cover target identity, slot change, loss of confirmed membership, and separate Master FX addressing.
+
+**Why:** A delayed or interrupted module-picking workflow must not silently mutate a different slot or a different chain position. Keeping the original target fixed is safer and more predictable, especially when remote data refreshes asynchronously.
+
+**Files:** `NativeControlsScreen.swift`, `RemoteControlModels.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limits:** This prevents stale destination/section retargeting but does not yet compare a changed module revision or name against the initial module state. That is a future optimistic-concurrency concern requiring appropriate stable metadata. Live replacement and recovery remain unverified on Move.
+
+**Testing decision:** GitHub Actions regression, syntax, Xcode build and packaging; no standalone hardware test. Deferred consolidated Phases 1–5 and M1.18–M1.24 tests remain intact. No merge to main.
+
 ## v0.9 Code-only integration QA · Chain certainty and safe Clear
 
 **Build gate:** GitHub Actions #374 passed on commit `4c83634` before this QA batch.
