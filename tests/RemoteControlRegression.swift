@@ -129,6 +129,26 @@ struct RemoteControlRegression {
         gesture.clear()
         check(gesture.end("synth:cutoff") == nil, "disconnect clears gesture writes")
 
-        print("PASS: remote queue, hierarchy, reconciliation and gesture finalization")
+        // Removing a module invalidates its old unsent continuous control
+        // values, without discarding a pending structural command or changes
+        // to another module/slot.
+        queue.clear()
+        queue.enqueue("old synth cutoff", coalescingKey: "set_param:0:synth:cutoff")
+        queue.enqueue("old synth resonance", coalescingKey: "set_param:0:synth:resonance")
+        queue.enqueue("slot2 synth", coalescingKey: "set_param:1:synth:cutoff")
+        queue.enqueue("fx1 mix", coalescingKey: "set_param:0:fx1:mix")
+        queue.enqueue("structural", coalescingKey: nil)
+        queue.enqueue("old synth drive", coalescingKey: "set_param:0:synth:drive")
+        queue.discardContinuous(prefix: "set_param:0:synth:")
+        check(queue.count == 3, "replacing synth only drops unsent synth controls for that slot")
+        check(queue.dequeue()?.text == "slot2 synth", "preserves controls for another slot")
+        check(queue.dequeue()?.text == "fx1 mix", "preserves another module")
+        check(queue.dequeue()?.text == "structural", "preserves queued structural commands")
+        queue.enqueue("master fx old", coalescingKey: "set_master_fx_param:-1:master_fx:fx2:mix")
+        queue.enqueue("master fx other", coalescingKey: "set_master_fx_param:-1:master_fx:fx3:mix")
+        queue.discardContinuous(prefix: "set_master_fx_param:-1:master_fx:fx2:")
+        check(queue.count == 1 && queue.dequeue()?.text == "master fx other", "master FX positions are independently invalidated")
+
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation and gesture finalization")
     }
 }

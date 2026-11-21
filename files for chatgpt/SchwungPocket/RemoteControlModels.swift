@@ -316,6 +316,16 @@ struct RemoteOutboundQueue {
         entries.append(Entry(text: text, coalescingKey: coalescingKey))
     }
 
+    /// Drop unsent continuous writes for an outgoing module instance before
+    /// its replacement/clear command enters the queue. Preserve structural
+    /// messages and writes for unrelated modules and mixer channels.
+    mutating func discardContinuous(prefix: String) {
+        entries.removeAll { entry in
+            guard let key = entry.coalescingKey else { return false }
+            return key.hasPrefix(prefix)
+        }
+    }
+
     mutating func dequeue() -> Entry? {
         guard !entries.isEmpty else { return nil }
         return entries.removeFirst()

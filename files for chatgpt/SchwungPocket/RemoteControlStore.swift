@@ -632,6 +632,8 @@ final class RemoteControlStore: ObservableObject {
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         gestureWrites.clear(prefix: component + ":")
+        valueReconciler.clear(prefix: "slot:\(slot):\(component):")
+        pendingMessages.discardContinuous(prefix: "set_param:\(slot):\(component):")
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": module.id])
         RemoteDiagnostics.log("Requested module swap: slot=\(slot) component=\(component) module=\(module.id)")
@@ -654,6 +656,8 @@ final class RemoteControlStore: ObservableObject {
         lastSent = lastSent.filter { !$0.key.hasPrefix(component + ":") }
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         gestureWrites.clear(prefix: component + ":")
+        valueReconciler.clear(prefix: "slot:\(slot):\(component):")
+        pendingMessages.discardContinuous(prefix: "set_param:\(slot):\(component):")
         beginLoading()
         send(["type": "set_param", "slot": slot, "key": "\(component):module", "value": "none"])
         RemoteDiagnostics.log("Requested module clear: slot=\(slot) component=\(component)")
@@ -895,8 +899,12 @@ final class RemoteControlStore: ObservableObject {
         editingKeys = editingKeys.filter { !$0.hasPrefix(component + ":") }
         gestureWrites.clear(prefix: component + ":")
         switch wireTarget {
-        case .slot(let slot): valueReconciler.clear(prefix: "slot:\(slot):\(component):")
-        case .masterFX: valueReconciler.clear(prefix: "masterFX:\(component):")
+        case .slot(let slot):
+            valueReconciler.clear(prefix: "slot:\(slot):\(component):")
+            pendingMessages.discardContinuous(prefix: "set_param:\(slot):\(component):")
+        case .masterFX:
+            valueReconciler.clear(prefix: "masterFX:\(component):")
+            pendingMessages.discardContinuous(prefix: "set_master_fx_param:-1:\(component):")
         case .tool, .unverified: break
         }
         customComponentUIURLs.removeValue(forKey: component)
