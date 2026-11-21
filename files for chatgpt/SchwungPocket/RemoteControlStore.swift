@@ -349,6 +349,12 @@ final class RemoteControlStore: ObservableObject {
 
         destination = newDestination
         clearPresentedData()
+        // Schwung currently subscribes only to the selected slot. Cached data
+        // for other slots cannot be treated as live after a destination switch.
+        // Clear the mixer tiles until the selected destination reports again.
+        slotMixStates = [:]
+        slotInstrumentNames = [:]
+        slotModuleStatuses = [:]
         switch wireTarget {
         case .unverified(let reason):
             loadState = .unsupported(reason)
@@ -383,6 +389,14 @@ final class RemoteControlStore: ObservableObject {
     func refresh() {
         guard isConnected else { return }
         clearPresentedData()
+        // Refresh invalidates the previously displayed snapshot. Keep unrelated
+        // slots unchanged, but do not show the selected slot's old values while
+        // waiting for a fresh response.
+        if case .slot(let slot) = wireTarget {
+            slotMixStates.removeValue(forKey: slot)
+            slotInstrumentNames.removeValue(forKey: slot)
+            slotModuleStatuses.removeValue(forKey: slot)
+        }
         switch wireTarget {
         case .slot(let slot): subscribe(slot: slot)
         case .masterFX: beginLoading(); send(["type": "subscribe_master_fx"])
