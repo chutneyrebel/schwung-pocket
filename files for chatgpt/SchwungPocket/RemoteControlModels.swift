@@ -418,14 +418,28 @@ enum RemoteParameterWritePolicy {
 
 // MARK: - Chain metadata gating
 
-/// Parameter definitions can arrive after an effect was removed on Move.
-/// Before the first complete listing, keep discovery compatible with builds
-/// that send metadata first. Once a listing exists, its occupied component
-/// names determine which component metadata is allowed back into the editor.
+/// Metadata can arrive before its chain section is confirmed, or after a
+/// module is removed. Confirmed section membership, not the first partial
+/// slot_info as a whole, determines when orphan values can be rejected.
 enum RemoteChainMetadataPolicy {
-    static func accepts(component: String, knownListing: Bool,
+    static func section(for component: String) -> String? {
+        if component == "synth" { return "synth" }
+        if component.range(of: #"^midi_fx[1-8]$"#, options: .regularExpression) != nil {
+            return "midi_fx"
+        }
+        if component.range(of: #"^fx[1-8]$"#, options: .regularExpression) != nil {
+            return "fx"
+        }
+        if component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil {
+            return "master_fx"
+        }
+        return nil
+    }
+
+    static func accepts(component: String, confirmedSections: Set<String>,
                         componentNames: [String: String]) -> Bool {
-        !knownListing || componentNames[component] != nil
+        guard let section = section(for: component) else { return false }
+        return !confirmedSections.contains(section) || componentNames[component] != nil
     }
 
     /// Slot-level settings are not a module and remain valid independently.

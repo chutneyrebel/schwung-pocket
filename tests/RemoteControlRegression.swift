@@ -209,17 +209,41 @@ struct RemoteControlRegression {
         // not recreate controls after a valid device listing has removed it.
         let liveComponents = ["synth": "Drift", "fx1": "Delay"]
         check(RemoteChainMetadataPolicy.accepts(
-              component: "fx2", knownListing: false,
+              component: "fx2", confirmedSections: [],
               componentNames: liveComponents),
-              "metadata can precede the initial chain listing")
-        check(!RemoteChainMetadataPolicy.accepts(
-              component: "fx2", knownListing: true,
-              componentNames: liveComponents),
-              "empty FX cannot be resurrected by delayed metadata")
+              "metadata can precede the first FX listing")
         check(RemoteChainMetadataPolicy.accepts(
-              component: "fx1", knownListing: true,
+              component: "fx2", confirmedSections: ["synth", "midi_fx"],
+              componentNames: liveComponents),
+              "partial slot listing must not suppress unknown FX metadata")
+        check(!RemoteChainMetadataPolicy.accepts(
+              component: "fx2", confirmedSections: ["fx"],
+              componentNames: liveComponents),
+              "confirmed empty FX cannot be resurrected by delayed metadata")
+        check(RemoteChainMetadataPolicy.accepts(
+              component: "fx1", confirmedSections: ["fx"],
               componentNames: liveComponents),
               "occupied FX still accepts its parameters")
+        check(!RemoteChainMetadataPolicy.accepts(
+              component: "midi_fx1", confirmedSections: ["midi_fx"],
+              componentNames: liveComponents),
+              "confirmed empty MIDI FX rejects orphan metadata")
+        check(RemoteChainMetadataPolicy.accepts(
+              component: "master_fx:fx1", confirmedSections: [],
+              componentNames: [:]),
+              "Master FX discovery can precede its first listing")
+        check(!RemoteChainMetadataPolicy.accepts(
+              component: "master_fx:fx1", confirmedSections: ["master_fx"],
+              componentNames: [:]),
+              "confirmed empty Master FX rejects late metadata")
+        check(RemoteChainMetadataPolicy.section(for: "fx4") == "fx" &&
+              RemoteChainMetadataPolicy.section(for: "midi_fx2") == "midi_fx" &&
+              RemoteChainMetadataPolicy.section(for: "synth") == "synth",
+              "component names resolve to their own section confidence")
+        check(!RemoteChainMetadataPolicy.accepts(
+              component: "unknown", confirmedSections: [],
+              componentNames: [:]),
+              "unrecognized components cannot masquerade as valid metadata")
         check(RemoteChainMetadataPolicy.moduleComponent(for: "fx2:mix") == "fx2",
               "slot FX parameters identify their component")
         check(RemoteChainMetadataPolicy.moduleComponent(for: "midi_fx1:rate") == "midi_fx1",
@@ -311,6 +335,6 @@ struct RemoteControlRegression {
               currentGeneration: 5, wantsConnection: true, cancelled: true),
               "cancelled retry cannot reopen socket")
 
-        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, active control ownership, chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
+        print("PASS: remote queue, module replacement, hierarchy, reconciliation, resend, active control ownership, partial-chain metadata gating, chain invalidation, catalogue and Master FX ownership, reconnect policy")
     }
 }

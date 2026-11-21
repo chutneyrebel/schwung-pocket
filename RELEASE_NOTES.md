@@ -14,6 +14,15 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## M1.23: Partial chain listing recovery
+
+- Tracks confirmed module-chain sections independently: synth, MIDI FX, audio FX, and Master FX.
+- A partial `slot_info` (or a section temporarily marked unknown) cannot wrongly declare every missing position empty. Late-arriving metadata is allowed until that particular section has a trustworthy listing.
+- Once a section has been confirmed, its empty positions remain protected from orphaned metadata and values, including through subsequent temporary unknown responses.
+- Missing `synth` data is not treated as an authoritative empty instrument.
+- Adds deterministic tests for partial listing transitions, confirmed empty positions, Master FX, and component classification.
+- **Status:** source committed; CI and hardware checkpoint tracked separately.
+
 ## M1.22: Verify parameter ownership before sending
 
 - Guards begin-edit, end-edit and parameter writes against the *current full parameter definition* rather than merely its wire key. A stale knob or enum callback cannot write with obsolete ranges or options when another module reuses its key.
