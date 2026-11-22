@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Protocol and metadata QA · Late hierarchy and panel response gating
+
+**Build gate:** Build #378, commit `16a8564`, passed before this change.
+
+**What:** Instrument hierarchy updates and Master FX `custom_ui` URLs now obey the same chain membership policy already used to reject orphaned parameter and chain metadata. Before membership is reported, early responses remain eligible. After Schwung explicitly confirms an empty position, a delayed hierarchy or custom panel is ignored rather than reviving obsolete controls.
+
+**How:** Added a `RemoteChainMetadataPolicy.accepts` guard at the entry to `RemoteControlStore.handleHierarchy` and the Master FX branch of the existing `custom_ui` message handler. Reused the established confirmed-chain set and component names without adding subscriptions, timers, inferred revision tokens, or wire commands. Extended `tests/RemoteControlRegression.swift` with pre-confirmation acceptance, confirmed-loaded acceptance and confirmed-empty rejection cases for both instrument and Master FX.
+
+**Why:** Parameter and chain metadata were already protected against removed modules; the hierarchy and web-panel paths were not. Consistent ownership gating prevents stale UI from resurfacing after a device-side removal or an app-initiated clear.
+
+**Affected files:** `files for chatgpt/SchwungPocket/RemoteControlStore.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limitations:** The underlying protocol does not provide a module revision marker. A delayed update for a new module occupying the same position with an identical identity cannot always be distinguished from valid metadata. This fix intentionally does not claim to solve that case. Live iPhone/Move behavior remains untested until the consolidated hardware checkpoint.
+
+**Verification:** Run deterministic Swift regressions, Swift syntax, Xcode project inspection and unsigned iPhone build in CI. Keep hardware testing deferred and `main` untouched.
+
 ## v0.9 Asynchronous metadata QA · Stable instrument hierarchy
 
 **Build gate:** Build #377 passed on `2657383`.

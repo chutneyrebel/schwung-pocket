@@ -1367,6 +1367,15 @@ final class RemoteControlStore: ObservableObject {
                 customToolUIURL = url.isEmpty ? nil : url
                 RemoteDiagnostics.log("Tool custom UI \(url.isEmpty ? "cleared" : "discovered")")
             case .masterFX where component.range(of: #"^master_fx:fx[1-8]$"#, options: .regularExpression) != nil:
+                // A delayed panel URL must not recreate a removed Master FX
+                // effect's UI after a confirmed chain listing or clear.
+                guard RemoteChainMetadataPolicy.accepts(
+                    component: component, confirmedSections: confirmedChainSections,
+                    componentNames: componentNames
+                ) else {
+                    RemoteDiagnostics.log("ignored stale Master FX custom_ui for \(component)")
+                    return
+                }
                 if url.isEmpty {
                     customComponentUIURLs.removeValue(forKey: component)
                 } else {
@@ -1772,6 +1781,17 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func handleHierarchy(_ message: [String: Any]) {
+        // Unlike chain_params, hierarchy has no scalar wire key to indicate
+        // whether its instrument is still loaded. Apply the same membership
+        // gate: tolerate early data before confirmation, reject late data
+        // once the synth position is explicitly confirmed empty.
+        guard RemoteChainMetadataPolicy.accepts(
+            component: "synth", confirmedSections: confirmedChainSections,
+            componentNames: componentNames
+        ) else {
+            RemoteDiagnostics.log("ignored stale instrument hierarchy for empty synth position")
+            return
+        }
         guard let data = message["data"] as? [String: Any], let rawLevels = data["levels"] as? [String: Any] else {
             RemoteDiagnostics.log("hierarchy without levels")
             return

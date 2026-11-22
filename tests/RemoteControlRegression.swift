@@ -350,6 +350,31 @@ struct RemoteControlRegression {
               component: "master_fx:fx1", confirmedSections: ["master_fx"],
               componentNames: [:]),
               "confirmed empty Master FX rejects late metadata")
+        // The same membership policy must gate metadata without scalar
+        // parameter keys (instrument hierarchy and Master FX custom panels).
+        // Before the section is known, early messages are accepted; after a
+        // confirmed removal they cannot resurrect the editor or web panel.
+        check(RemoteChainMetadataPolicy.accepts(
+            component: "synth", confirmedSections: [],
+            componentNames: [:]), "early synth hierarchy is allowed before membership confirmation")
+        check(RemoteChainMetadataPolicy.accepts(
+            component: "synth", confirmedSections: ["synth"],
+            componentNames: ["synth": "Synth_esis"]), "loaded synth hierarchy remains eligible")
+        check(!RemoteChainMetadataPolicy.accepts(
+            component: "synth", confirmedSections: ["synth"],
+            componentNames: [:]), "delayed hierarchy must not recreate a removed synth")
+        check(RemoteChainMetadataPolicy.accepts(
+            component: "master_fx:fx2", confirmedSections: [],
+            componentNames: [:]), "early Master FX custom UI remains compatible")
+        check(!RemoteChainMetadataPolicy.accepts(
+            component: "master_fx:fx2", confirmedSections: ["master_fx"],
+            componentNames: ["master_fx:fx1": "Reverb"]),
+            "late custom UI cannot reopen a confirmed empty FX position")
+        check(RemoteChainMetadataPolicy.accepts(
+            component: "master_fx:fx2", confirmedSections: ["master_fx"],
+            componentNames: ["master_fx:fx2": "Delay"]),
+            "current loaded FX custom UI remains eligible")
+
         check(RemoteChainMetadataPolicy.section(for: "fx4") == "fx" &&
               RemoteChainMetadataPolicy.section(for: "midi_fx2") == "midi_fx" &&
               RemoteChainMetadataPolicy.section(for: "synth") == "synth",
