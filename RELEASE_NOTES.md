@@ -14,6 +14,22 @@
 - **Pending hardware verification:** requires testing with the physical Ableton Move running Schwung.
 - **Planned / not confirmed:** not to be treated as a working feature.
 
+## v0.9 Asynchronous metadata QA · Stable instrument hierarchy
+
+**Build gate:** Build #377 passed on `2657383`.
+
+**What:** Fixed redundant instrument hierarchy rebuilds caused by delayed MIDI FX and Audio FX `chain_params` messages. Only synth metadata updates now rebuild the instrument's Other page; identical resulting hierarchies do not trigger new SwiftUI publications.
+
+**How:** Added `RemoteInstrumentHierarchyPolicy.needsPageRefresh` and `reconciledLevels` to `RemoteControlModels.swift`. `RemoteControlStore.handleChainParams` calls the refresh only for `synth`. The refresh helper skips unchanged arrays and `handleHierarchy` reconciles incoming hierarchy and known synth controls in a single update. Added regression fixtures for repeated, mixed-module, new, and removed parameter definitions.
+
+**Why:** FX metadata and instrument navigation have separate owners. Delayed effect updates should not cause unrelated page rebuilds, unexpected navigation resets or avoidable UI invalidation.
+
+**Files:** `RemoteControlModels.swift`, `RemoteControlStore.swift`, `tests/RemoteControlRegression.swift`, `RELEASE_NOTES.md`, `docs/v0.9-development-test-matrix.md`.
+
+**Limits:** No wire-generation IDs have been inferred; same-identity out-of-order module revisions cannot be fully established without protocol support. Hardware remains untested by request.
+
+**Verification:** GitHub Actions regressions, Swift syntax, Xcode checks, unsigned iPhone compilation; no merge to `main`.
+
 ## v0.9 Code-only integration QA · Instrument hierarchy isolation
 
 **Build gate:** Build #376 (`8d00dbf`) completed successfully before this QA pass.

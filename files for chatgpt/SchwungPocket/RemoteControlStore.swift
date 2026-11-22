@@ -148,17 +148,11 @@ final class RemoteControlStore: ObservableObject {
     }
 
     private func refreshOtherLevel() {
-        guard !levels.isEmpty else { return }
-        let baseLevels = levels.filter { $0.id != "other" }
-        let unassigned = RemoteInstrumentHierarchyPolicy.unassignedKeys(
-            parameters: parameters, levels: baseLevels
+        let updated = RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            levels, parameters: parameters
         )
-
-        levels = baseLevels
-        if !unassigned.isEmpty {
-            levels.append(RemoteLevel(id: "other", name: "Other", parameterKeys: unassigned))
-        }
-        // Keep the order from the module hierarchy; Other stays last.
+        guard updated != levels else { return }
+        levels = updated
         if !levels.contains(where: { $0.id == selectedLevelID }) {
             selectedLevelID = levels.first?.id ?? "root"
         }
@@ -1803,14 +1797,15 @@ final class RemoteControlStore: ObservableObject {
             return
         }
 
-        let updatedLevels = RemoteHierarchyLayout.levels(from: rawLevels)
-        // Schwung can re-broadcast an unchanged hierarchy whenever live
-        // parameter values change. Avoid invalidating SwiftUI navigation and
-        // knob views for value-only updates.
-        guard levels.filter({ $0.id != "other" }) != updatedLevels else { return }
+        let updatedLevels = RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            RemoteHierarchyLayout.levels(from: rawLevels), parameters: parameters
+        )
+        // Avoid publishing an intermediate or identical hierarchy.
+        guard levels != updatedLevels else { return }
         levels = updatedLevels
-        refreshOtherLevel()
-        if !levels.contains(where: { $0.id == selectedLevelID }) { selectedLevelID = levels.first?.id ?? "root" }
+        if !levels.contains(where: { $0.id == selectedLevelID }) {
+            selectedLevelID = levels.first?.id ?? "root"
+        }
     }
 
     private func handleChainParams(_ message: [String: Any]) {
@@ -1854,7 +1849,9 @@ final class RemoteControlStore: ObservableObject {
         for parameter in parsed { RemoteDiagnostics.log(RemoteDiagnostics.describe(parameter)) }
         invalidateSupersededParameterDefinitions(component: component, incoming: parsed)
         parameters = parameters.filter { $0.component != component } + parsed
-        refreshOtherLevel()
+        if RemoteInstrumentHierarchyPolicy.needsPageRefresh(for: component) {
+            refreshOtherLevel()
+        }
         loadState = .loaded
         loadTimeoutTask?.cancel()
     }

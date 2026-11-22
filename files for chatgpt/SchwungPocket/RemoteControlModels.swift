@@ -512,6 +512,22 @@ enum RemoteInstrumentHierarchyPolicy {
             .map(\.wireKey)
     }
 
+    /// FX updates must not rebuild the instrument's page hierarchy.
+    static func needsPageRefresh(for component: String) -> Bool {
+        component == "synth"
+    }
+
+    /// Preserve Schwung's level ordering and add only instrument-owned
+    /// unassigned controls. Equal results require no SwiftUI publication.
+    static func reconciledLevels(_ existing: [RemoteLevel],
+                                 parameters: [RemoteParameter]) -> [RemoteLevel] {
+        guard !existing.isEmpty else { return [] }
+        let base = existing.filter { $0.id != "other" }
+        let unassigned = unassignedKeys(parameters: parameters, levels: base)
+        guard !unassigned.isEmpty else { return base }
+        return base + [RemoteLevel(id: "other", name: "Other", parameterKeys: unassigned)]
+    }
+
     static func orderedParameters(for level: RemoteLevel,
                                   parameters: [RemoteParameter]) -> [RemoteParameter] {
         let instrument = parameters.filter { $0.component == "synth" }

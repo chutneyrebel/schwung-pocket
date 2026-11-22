@@ -113,6 +113,36 @@ struct RemoteControlRegression {
             levels: [filterPage]).isEmpty,
             "FX-only metadata cannot create an instrument Other page")
 
+        // Delayed effect metadata is not entitled to rebuild synth navigation.
+        let onlySynthLevels = [
+            RemoteLevel(id: "root", name: "Main", parameterKeys: ["cutoff"]),
+            RemoteLevel(id: "filter", name: "Filter", parameterKeys: ["resonance"])
+        ]
+        let reconciledPages = RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            onlySynthLevels, parameters: mixedPages
+        )
+        check(reconciledPages.map(\.id) == ["root", "filter"],
+              "FX controls cannot create an instrument Other page")
+        check(RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            reconciledPages, parameters: mixedPages) == reconciledPages,
+              "identical metadata produces equal page arrays")
+        check(!RemoteInstrumentHierarchyPolicy.needsPageRefresh(for: "fx1") &&
+              !RemoteInstrumentHierarchyPolicy.needsPageRefresh(for: "midi_fx1") &&
+              RemoteInstrumentHierarchyPolicy.needsPageRefresh(for: "synth"),
+              "only synth metadata refreshes instrument navigation")
+        let newSynthControl = mixedPages + [
+            makeParameter("shape", type: "float", component: "synth")
+        ]
+        let additionalPages = RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            reconciledPages, parameters: newSynthControl
+        )
+        check(additionalPages.last?.id == "other" &&
+              additionalPages.last?.parameterKeys == ["synth:shape"],
+              "new unassigned synth controls appear in Other")
+        check(RemoteInstrumentHierarchyPolicy.reconciledLevels(
+            additionalPages, parameters: mixedPages) == reconciledPages,
+              "removed synth controls retire obsolete Other page")
+
         // Delayed device echoes should not pull a recently edited knob
         // backwards, but the device must eventually become authoritative.
         var reconcile = RemoteValueReconciler()
